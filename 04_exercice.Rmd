@@ -10,6 +10,8 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lubridate)
 library(scales)
+library(mapproj)
+library(gganimate)
 theme_set(theme_light())
 ```
 
@@ -17,6 +19,9 @@ theme_set(theme_light())
 data <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2018/2018-11-06/us_wind.csv")
 
 ```
+
+### Analisis solo de los 48 estados de USA distrito columbia
+
 ```{r}
 data %>% 
   count(t_state, sort = TRUE)
@@ -24,6 +29,244 @@ data %>%
 ```{r}
 data %>% 
   count(p_name, sort = TRUE)
+```
+```{r}
+#install.packages("mapproj")
+data %>% 
+  filter(xlong < 100) %>% 
+  ggplot(aes(
+    x = xlong,
+    y = ylat
+  ))+
+  borders("state")+
+  geom_point()+
+  coord_map()+
+  theme_void()
+```
+
+```{r}
+data %>% 
+  filter(!t_state %in% c("AK","HI","GU","PR")) %>% 
+  ggplot(aes(
+    x = xlong,
+    y = ylat
+  ))+
+  borders("state")+
+  geom_point()+
+  coord_map()+
+  theme_void()
+```
+
+```{r}
+data %>% 
+  filter(!t_state %in% c("AK","HI","GU","PR")) %>% 
+  mutate(p_name = fct_lump(p_name, 6)) %>% 
+  arrange(p_name != "Other") %>% 
+  ggplot(aes(
+    x = xlong,
+    y = ylat,
+    color = p_name
+  ))+
+  borders("state")+
+  geom_point()+
+  coord_map()+
+  theme_void()
+```
+```{r}
+data.columbia <- data %>% 
+  filter(!t_state %in% c("AK","HI","GU","PR")) %>% 
+  mutate(p_year = ifelse(p_year < -8000, NA, p_year),
+         t_cap = ifelse(t_cap < 0, NA, t_cap)) %>% 
+  mutate_if(is.numeric, ~ ifelse(. == -9999, NA, .))
+```
+
+```{r}
+data.proyect <- data.columbia %>% 
+  na.omit(p_year) %>% 
+  group_by(p_name, t_state, p_year) %>%
+  summarize(turbines = n(),
+            lon = round(mean(xlong),2),
+            lat = round(mean(ylat),2),
+            lon_sd = round(sd(xlong),2),
+            lat_sd = round(sd(ylat),2),
+            total_capacity = sum(t_cap, na.rm = TRUE)
+  ) %>% 
+  ungroup()
+
+```
+```{r}
+data.proyect%>%
+  ggplot(aes(
+    x = lon,
+    y = lat,
+    size = turbines,
+    color = p_year
+  ))+
+  borders("state")+
+  geom_point()+
+  coord_map()+
+  theme_void()+
+  theme(legend.position = "bottom")
+```
+```{r}
+data.proyect%>%
+  ggplot(aes(
+    x = lon,
+    y = lat,
+    size = turbines,
+    color = total_capacity
+  ))+
+  borders("state")+
+  geom_point()+
+  coord_map()+
+  theme_void()+
+  theme(legend.position = "bottom")
+```
+```{r}
+wind.proyect <- data.columbia
+```
+
+
+
+```{r}
+wind.proyect %>%  
+  filter(!p_year == "NA") %>% 
+  ggplot(aes(
+    x = p_year
+  ))+
+  geom_histogram(bins = 30)
+
+
+```
+
+### como avanzo la capacidad de las turbinas en el tiempo
+
+```{r}
+data.proyect %>% 
+  group_by(p_year) %>% 
+  summarise(median_capacity = median(total_capacity), na.rm = TRUE, 
+          projects = n()) %>% 
+  ggplot(aes(
+    x = p_year,
+    y = median_capacity
+  ))+
+  geom_point()+
+  geom_line()+
+  labs(title = "Capacidad media por turbina eolica")
+```
+
+```{r}
+data.proyect %>% 
+  group_by(p_year) %>% 
+  summarise(median_capacity = median(total_capacity), na.rm = TRUE, 
+          projects = n()) %>% 
+  ggplot(aes(
+    x = p_year,
+    y = median_capacity
+  ))+
+  geom_point()+
+  geom_smooth(method = "loess", formula = "y~x")+
+  geom_line()+
+  labs(title = "Capacidad media por turbina eolica")
+```
+
+
+
+```{r}
+data.proyect %>% 
+  ggplot(aes(
+    x = p_year,
+    y = total_capacity
+  ))+
+  geom_point()
+```
+
+```{r}
+data.proyect %>% 
+  ggplot(aes(
+    x = p_year,
+    y = total_capacity / turbines
+  ))+
+  geom_point()
+```
+
+
+```{r}
+wind.proyect %>% 
+  group_by(t_model) %>% 
+  summarise(t_cap = n_distinct(t_cap))%>% 
+  arrange(desc(t_cap))
+```
+
+
+
+
+```{r}
+turbine.models <- wind.proyect %>% 
+  group_by(t_model) %>% 
+  summarize(t_cap = median(t_cap),
+            t_hh = median(t_hh),
+            t_rd = median(t_rd),
+            t_rsa = median(t_rsa),
+            t_ttlh = median(t_ttlh),
+            turbines = n(),
+            projects = n_distinct(p_name)) %>% 
+  arrange(desc(projects))
+```
+
+```{r}
+turbine.models %>%
+  na.omit(t_cap) %>% 
+  ggplot(aes(
+    x = t_ttlh,
+    y = t_cap
+  ))+
+  geom_point()+
+  labs(title = "Mientras mas grande la turbina es mejor",
+       x = "Turbina total altura (metros)",
+       y = "Turbina capacidad (km)"
+  )
+  
+```
+```{r}
+turbine.models %>%
+  na.omit(t_cap) %>% 
+  ggplot(aes(
+    x = t_rsa,
+    y = t_cap
+  ))+
+  geom_point()+
+  labs(title = "Mientras mas grande la turbina es mejor",
+       x = "Turbina con rotor swept de area (mt ^ 2)",
+       y = "Turbina capacidad (km)"
+  )
+```
+### animation 
+
+```{r}
+#install.packages("gganimate")
+
+animate.1 <- data.proyect%>%
+  filter(!is.na(p_year), !is.infinite(p_year)) %>% 
+  crossing(time = 1980:2018) %>% 
+  filter(p_year <= time) %>% 
+ggplot(aes(
+    x = lon,
+    y = lat,
+    size = turbines,
+    color = p_year
+  ))+
+  borders("state")+
+  geom_point()+
+  transition_states(
+     p_year,
+     transition_length = 2,
+     state_length = 1
+  )+
+  coord_map()+
+  labs(title = "year:{frame_along}")
+
+animate(animate.1)
 ```
 
 
