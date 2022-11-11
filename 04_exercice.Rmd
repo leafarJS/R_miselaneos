@@ -1,0 +1,29 @@
+---
+title: "04_exercice"
+author: "jorge_callejo"
+date: "2022-11-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(scales)
+theme_set(theme_light())
+```
+
+```{r}
+data <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2018/2018-11-06/us_wind.csv")
+
+```
+```{r}
+data %>% 
+  count(t_state, sort = TRUE)
+```
+```{r}
+data %>% 
+  count(p_name, sort = TRUE)
+```
+
+

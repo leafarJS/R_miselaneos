@@ -1,0 +1,320 @@
+---
+title: "exercices_03"
+author: "jorge_callejo"
+date: "2022-11-09"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(countrycode)
+theme_set(theme_light())
+```
+
+
+```{r}
+data_row <- read_csv("database/download.csv", show_col_types = FALSE)
+
+```
+
+```{r}
+data <- data_row %>%
+  select(-"...1") %>% 
+  mutate(country_name = countrycode(country, "iso2c", "country.name"), sort = TRUE)
+```
+ 
+```{r}
+data %>% 
+  count(date) %>% 
+  ggplot(aes(
+    x = date,
+    y = n
+  ))+
+  geom_line()+
+  expand_limits(y = 0)+
+  labs(y = "# de descargas de R por dia")
+```
+
+```{r}
+data %>% 
+  count(date) %>% 
+  group_by(weekday = wday(date, label = TRUE)) %>% 
+  summarise(media = mean(n)) %>% 
+  ggplot(aes(
+    x = weekday,
+    y = media
+  ))+
+  geom_line(group = 1)+
+  expand_limits(y = 0)+
+  labs(y = "Descargas medias por semana")
+```
+
+```{r}
+data %>% 
+  count(week = floor_date(date, "week")) %>% 
+  filter(week > min(week)) %>% 
+  ggplot(aes(
+    x =week,
+    y = n
+  ))+
+  geom_line()+
+  expand_limits(y = 0)+
+  labs(y = "# de descargas por semana de R")
+```
+
+
+
+```{r}
+min(data$date)
+max(data$date)
+```
+
+```{r}
+#install.packages("countrycode")
+
+data %>% 
+  count(country = countrycode(country,"iso2c", "country.name"), sort = TRUE)
+```
+
+
+```{r}
+data %>% 
+count(country = countrycode(country,"iso2c", "country.name"), sort = TRUE) %>% 
+mutate(percent = n/sum(n)) %>% 
+filter(!is.na(country)) %>% 
+head(20) %>% 
+mutate(country = fct_reorder(country, percent)) %>% 
+ggplot(aes(
+  x = country,
+  y = percent,
+  fill = "orange"
+))+
+geom_col(show.legend = FALSE)+
+coord_flip()+
+scale_y_continuous(labels = percent_format())+
+labs(
+  title = "Paises que utilizan mas el lenguaje R"
+)
+```
+
+```{r}
+data %>% 
+count(version, sort = TRUE)
+```
+```{r}
+data %>% 
+mutate(version = fct_lump(version, 8)) %>% 
+count(date, version) %>% 
+ggplot(aes(
+  x = date,
+  y = n, 
+  color = version
+))+
+  geom_line()
+
+```
+
+```{r}
+data %>% 
+mutate(version = fct_lump(version, 8)) %>% 
+count(date, version) %>% 
+ggplot(aes(
+  x = date,
+  y = n, 
+  color = version
+))+
+  geom_line()+
+  facet_wrap(~ version)
+```
+
+### ¿Qué dia la gente instala mas R?
+
+```{r}
+data %>% 
+  count(hour = hour(time))
+```
+```{r}
+data %>% 
+  count(hour = hour(time)) %>% 
+  ggplot(aes(
+    x = hour,
+    y = n
+  ))+
+  geom_line()+
+  expand_limits(y = 0)
+```
+
+```{r}
+data %>% 
+  mutate(country = countrycode(country, "iso2c", "country.name")) %>% 
+  filter(!is.na(country)) %>% 
+  count(hour = hour(time),
+        country = fct_lump(country, 9)) %>% 
+  ggplot(aes(
+    x = hour,
+    y = n
+  ))+
+  geom_line()+
+  expand_limits(y = 0)+
+  facet_wrap(~ country, scales = "free_y")
+
+```
+
+```{r}
+data %>% 
+  filter(country == "BO") %>% 
+  count(hour = hour(time)) %>% 
+  ggplot(aes(
+    x = hour,
+    y = n
+  ))+
+  geom_line()+
+  expand_limits(y = 0)+
+  labs(
+    title = "Horarios de descarga de R en Bolivia",
+    y = "# de veces",
+    x = "Horas del dia"
+  )
+```
+
+### ¿Que sistema operativo usan los usuarios de R?
+
+```{r}
+data %>% 
+  count(os, sort = TRUE)
+```
+
+```{r}
+data %>% 
+  count(country_name = fct_lump(country_name, 8),
+        week = floor_date(date, "week")) %>% 
+  filter(week > min(week)) %>% 
+  ggplot(aes(
+    x = week,
+    y = n,
+    color = country_name
+  ))+
+  geom_line()
+```
+
+### Revisar las direcciones IP
+
+```{r}
+data %>% 
+  count(ip_id, sort=TRUE) %>% 
+  ggplot(aes(
+    x = n
+  ))+
+  geom_histogram()
+```
+
+```{r}
+data %>% 
+  mutate(datetime = as.POSIXlt(date) + time) %>% 
+  arrange(datetime) %>% 
+  group_by(ip_id) %>% 
+  mutate(gap = datetime - lag(datetime)) %>% 
+  filter(!is.na(gap))
+# lag() se utiliza para serie de tiempos
+```
+
+```{r}
+download <-data %>% 
+  mutate(datetime = as.POSIXlt(date) + time) %>% 
+  arrange(datetime) %>% 
+  group_by(ip_id) %>% 
+  mutate(gap = as.numeric(datetime - lag(datetime))) %>% 
+  filter(!is.na(gap))
+```
+
+```{r}
+download %>% 
+  filter(gap > 0) %>% 
+  ggplot(aes(
+    x = gap
+  ))+
+  geom_histogram(bins = 30)+
+  geom_vline(color ="red", lty = 2, xintercept = 86400)+
+  scale_x_log10(breaks = 60^(0:4),
+                labels = c("segundos", "minutos", "horas",  "2.5 dias", "120 dias"))
+#86400 segundos por dia
+```
+
+```{r}
+ip_count <- download %>% 
+  count(ip_id, sort = TRUE)
+
+ip_count
+```
+la mayoría (`r percent(mean(ip_count$n >= 100))``) son direcciones IP que instalan R mas de 100 veces al año
+
+
+
+
+```{r}
+data.today <- read.csv("database/2022-11-08.csv",header = TRUE, sep = ",")
+```
+
+
+```{r}
+data.today %>% 
+  count(country, sort = TRUE)
+```
+
+```{r}
+data.today %>% 
+  filter(country %in% c("US", "IN")) %>% 
+  count(country, package, sort = TRUE) %>% 
+  spread(country, n, fill = 0) %>% 
+  mutate(total = US + IN) %>% 
+  arrange(desc(total))
+```
+
+```{r}
+data.today %>% 
+  filter(country %in% c("US", "IN")) %>% 
+  count(country, package, sort = TRUE) %>% 
+  spread(country, n, fill = 0) %>% 
+  mutate(total = US + IN,
+         IN = round((IN+1) / sum(IN + 1),4),
+         US = round((US+1) /sum(US + 1),4),
+         ratio = US/IN) %>% 
+  arrange(desc(total))
+```
+```{r}
+data.today %>% 
+  filter(country %in% c("US", "IN")) %>% 
+  group_by(country, package, sort = TRUE) %>% 
+  summarize(n = n_distinct(ip_id)) %>% 
+  spread(country, n, fill = 0) %>% 
+  ungroup() %>% 
+  mutate(total = US + IN,
+         IN = round((IN+1) / sum(IN + 1),4),
+         US = round((US+1) /sum(US + 1),4),
+         ratio = US/IN) %>% 
+  filter(total >= 1000) %>% 
+  arrange(desc(total))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

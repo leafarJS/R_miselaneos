@@ -1,0 +1,386 @@
+---
+title: "02_exercice"
+author: "jorge_callejo"
+date: "2022-11-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(scales)
+theme_set(theme_light())
+```
+
+
+```{r}
+data_row <- read_csv("database/horror_movie_0.csv")
+```
+
+```{r}
+class(data_row$distributor)
+class(data_row$release_date)
+```
+
+
+```{r}
+data <- data_row %>%
+  select(-"...1") %>% 
+mutate(release_date = as.Date(parse_date_time(release_date, "%m!/%d/%Y"))) %>% 
+arrange(desc(row_number())) %>%
+distinct(movie, release_date, .keep_all = TRUE) %>%
+mutate(distributor = fct_lump(distributor, 6)) %>% 
+filter(worldwide_gross > 0) %>% 
+  mutate(profit_ratio = worldwide_gross / production_budget, decade = 10 * floor(year(release_date)/10)) %>% 
+  view()
+#fct_lump agrupo a los distribuidores con mas de 6 producciones
+```
+
+```{r}
+ data %>% 
+  ggplot(aes(
+    x = production_budget
+  ))+
+  geom_histogram()
+```
+
+
+```{r}
+ data %>% 
+  ggplot(aes(
+    x = production_budget
+  ))+
+  geom_histogram()+
+  scale_x_log10(labels = dollar_format())
+
+```
+
+```{r}
+data %>% 
+  count(distributor, sort = TRUE)
+```
+```{r}
+class(data$distributor)
+class(data$release_date)
+```
+
+
+
+```{r}
+data %>% 
+  ggplot(aes(
+    x = distributor,
+    y = production_budget
+  ))+
+  geom_boxplot()+
+  scale_y_log10(labels = dollar_format())+
+  coord_flip()
+  
+```
+
+```{r}
+data %>% 
+  ggplot(aes(
+    x = distributor,
+    y = worldwide_gross
+  ))+
+  geom_boxplot()+
+  scale_y_log10(labels = dollar_format())+
+  coord_flip()
+```
+### que generos hacen mas dinero?
+```{r}
+data %>% 
+  count(genre, sort = TRUE)
+
+```
+```{r}
+data %>% 
+  mutate(genre = fct_reorder(genre, production_budget)) %>% 
+  ggplot(aes(
+    x = genre, 
+    y = production_budget
+  ))+
+  geom_boxplot()+
+  scale_y_log10(labels = dollar_format())+
+  coord_flip()
+```
+```{r}
+data %>% 
+mutate(genre = fct_reorder(genre, production_budget)) %>% 
+filter(!is.na(distributor)) %>% 
+ggplot(aes(
+    x = genre, 
+    y = production_budget,
+    fill = distributor
+  ))+
+  geom_boxplot()+
+  scale_y_log10(labels = dollar_format())+
+  coord_flip()+
+  facet_wrap(~ distributor)
+```
+```{r}
+data %>% 
+mutate(genre = fct_reorder(genre, worldwide_gross)) %>% 
+filter(!is.na(distributor)) %>% 
+ggplot(aes(
+    x = genre, 
+    y = worldwide_gross,
+    fill = distributor
+  ))+
+  geom_boxplot()+
+  scale_y_log10(labels = dollar_format())+
+  coord_flip()+
+  facet_wrap(~ distributor)
+```
+### que generos generan mas ganacias?
+
+```{r}
+data %>% 
+  mutate(porcentaje_ing = worldwide_gross/production_budget) %>% 
+  arrange(desc(porcentaje_ing)) %>% 
+  select(movie, production_budget, worldwide_gross, porcentaje_ing) %>% 
+view()
+```
+
+```{r}
+data %>% 
+  filter(!worldwide_gross <= 0) %>% 
+  mutate(porcentaje_ing = worldwide_gross/production_budget) %>% 
+  arrange(desc(porcentaje_ing)) %>% 
+  select(movie, genre, production_budget, worldwide_gross, porcentaje_ing) %>% 
+  ggplot(aes(
+    x = genre,
+    y = porcentaje_ing,
+    fill = genre
+  ))+
+  geom_boxplot()+
+  scale_y_log10(labels = comma_format())+
+  coord_flip()
+```
+```{r}
+data %>% 
+  filter(!worldwide_gross <= 0) %>% 
+  mutate(porcentaje_ing = worldwide_gross/production_budget) %>% 
+  group_by(genre) %>% 
+  summarise(media_ratio =  median(porcentaje_ing)) %>% 
+  arrange(desc(media_ratio))
+
+```
+```{r}
+data %>% 
+  filter(!worldwide_gross <= 0) %>% 
+  mutate(porcentaje_ing = worldwide_gross/production_budget) %>% 
+  group_by(genre) %>% 
+  summarise(media_ratio =  median(porcentaje_ing)) %>% 
+  arrange(desc(media_ratio)) %>% 
+  mutate(genre = fct_reorder(genre, media_ratio)) %>% 
+  ggplot(aes(
+    x = genre,
+    y = media_ratio,
+    fill = genre
+  ))+
+  geom_col()+
+  scale_y_continuous(labels = function(x) paste0(x, "X"))+
+  coord_flip()+
+  theme(legend.position = "bottom")
+```
+### analisis peliculas de horror?
+
+
+```{r}
+data %>% 
+  group_by(genre, distributor, decade) %>% 
+  summarize(median_profit_ratio = median(profit_ratio), movies = n()) %>% 
+  ungroup() %>% 
+  filter(decade >=1990,
+         !is.na(distributor)) %>% 
+  arrange(desc(median_profit_ratio)) %>% 
+  mutate(genre = fct_reorder(genre, median_profit_ratio)) %>% 
+  ggplot(aes(
+    x = decade,
+    y = median_profit_ratio,
+    color = genre
+  ))+
+  geom_line()+
+  facet_wrap(~ distributor)+
+  scale_y_continuous(labels = function(x) paste0(x, "X"))+
+  theme(legend.position = "bottom")
+
+```
+
+
+### ¿Cuáles son los presupuestos típicos a lo largo del tiempo?
+
+
+```{r}
+data %>% 
+count(decade)
+```
+
+```{r}
+data %>% 
+group_by(decade) %>% 
+dplyr::summarize_at(vars(production_budget:worldwide_gross), median, na.rm = TRUE)
+```
+
+```{r}
+data %>% 
+  arrange(desc(worldwide_gross)) %>% 
+  view()
+```
+
+gather reemplaza a pivot_longer
+```{r}
+data %>% 
+group_by(decade) %>% 
+dplyr::summarize_at(vars(production_budget:worldwide_gross), median, na.rm = TRUE) %>% 
+gather(metric, value, -decade) %>% 
+ggplot(aes(
+  x = decade,
+  y = value,
+  color = metric
+))+
+  geom_line()+
+  scale_y_continuous(labels = dollar_format())+
+  theme(legend.position = "bottom")
+```
+###¿Cuáles son los géneros más comunes a lo largo del tiempo?
+
+```{r}
+data %>% 
+  count(decade, genre) %>% 
+  group_by(decade) %>% 
+  mutate(percent = n/sum(n)) %>% 
+  ggplot(aes(
+    x =decade,
+    y = percent,
+    color = genre
+  ))+
+  geom_line()+
+  scale_y_continuous(labels = percent_format())+
+  theme(legend.position = "bottom")
+```
+```{r}
+data %>% 
+  filter(!is.na(distributor)) %>% 
+  count(distributor, genre) %>% 
+  mutate(genre = fct_reorder(genre, n)) %>% 
+  ggplot(aes(
+    x =genre,
+    y = n,
+    fill = distributor
+  ))+
+  geom_col(show.legend = FALSE)+  
+  facet_wrap(~ distributor, scales = "free_x")+
+  coord_flip()
+
+```
+
+
+### Cuales fueron las peliculas de horror mas rentables de la ultima decada?
+
+```{r}
+horror.movies <-data %>% 
+  filter(genre == "Horror") %>% 
+  arrange(desc(profit_ratio))
+
+horror.movies %>% 
+  head(10) %>% 
+  mutate(movie = fct_reorder(movie, profit_ratio)) %>% 
+  ggplot(aes(
+    x = movie,
+    y = profit_ratio
+  ))+
+  geom_col(show.legend = FALSE, fill = "orange")+
+  coord_flip()+
+  scale_y_continuous(labels = function(x) paste0(x, "X"))+
+  labs(
+    x = "",
+    y = "Ratio de producciones a nivel mundial",
+    title = "Peliculas de horror que tuvieron excelentes recaudaciones"
+  )
+```
+
+
+```{r}
+horror.movies <-data %>% 
+  filter(genre == "Horror") %>% 
+  arrange(desc(profit_ratio))
+
+horror.movies %>% 
+  head(10) %>% 
+  mutate(movie = fct_reorder(movie, profit_ratio)) %>% 
+  ggplot(aes(
+    x = movie,
+    y = profit_ratio,
+    fill = distributor
+  ))+
+  geom_col()+
+  coord_flip()+
+  scale_y_continuous(labels = function(x) paste0(x, "X"))+
+  labs(
+    x = "",
+    y = "Ratio de producciones a nivel mundial",
+    title = "Peliculas de horror que tuvieron excelentes recaudaciones por casa cinematrografica"
+  )+
+  theme(legend.position = "bottom")
+```
+```{r}
+data %>% 
+  arrange(desc(profit_ratio)) %>% 
+  tail(20) %>% 
+  mutate(movie = paste0(movie, "(",year(release_date),")"),
+         movie = fct_reorder(movie, profit_ratio)) %>% 
+  ggplot(aes(
+    x = movie,
+    y = profit_ratio,
+    fill = distributor
+  ))+
+  geom_col()+
+  coord_flip()+
+  scale_y_continuous(labels = function(x) paste0(x, "X"))+
+  labs(
+    x = "",
+    y = "Ratio de producciones a nivel mundial",
+    title = "Peliculasque tuvieron recaudaciones muy bajas"
+  )+
+  theme(legend.position = "bottom")
+```
+
+```{r}
+horror.movies %>% 
+  filter(release_date >= "1995-01-01",
+         profit_ratio >= .01) %>% 
+  ggplot(aes(
+    x = release_date,
+    y = profit_ratio
+  ))+
+  geom_point()+
+  geom_smooth(method = "lm", color = "red")+
+  geom_text(aes(label = movie), vjust = 1, hjust = -1, check_overlap = TRUE)+
+  scale_y_log10(labels = function(x) paste0(x, "M"), breaks = c(.1,1,10,100))
+```
+```{r}
+graph.1 <-data %>% 
+  filter(release_date >= "1999-01-01",
+         profit_ratio >= .01) %>% 
+  ggplot(aes(
+    x = release_date,
+    y = profit_ratio
+  ))+
+  geom_point(aes(label = movie))+
+  geom_smooth(method = "lm", color = "red")+
+  scale_y_log10(labels = function(x) paste0(x, "M"), breaks = c(.1,1,10,100))+
+  facet_wrap(~genre)
+```
+
+```{r}
+library(plotly)
+ggplotly(graph.1)
+```
+
+### 
+
+
+
