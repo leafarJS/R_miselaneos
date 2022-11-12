@@ -1,0 +1,377 @@
+---
+title: "05_exercice"
+author: "jorge_callejo"
+date: "2022-11-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#install.packages("malariaAtlas")
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(mapproj)
+library(malariaAtlas)
+library(fuzzyjoin)
+library(stringr)
+library(gganimate)
+library(countrycode)
+theme_set(theme_light())
+
+```
+
+```{r}
+kenia.pr <- tbl_df(malariaAtlas::getPR(ISO = "kEN", species = "BOTH")) %>% 
+  filter(!is.na(pr)) 
+```
+
+
+```{r}
+kenia.pr %>% 
+  group_by(year_start) %>% 
+  summarise(examined = sum(examined),
+            positive = sum(positive),
+            studies = n()) %>% 
+  mutate(pr = round(positive / examined,2)) %>% 
+  ggplot(aes(
+    x = year_start,
+    y = pr
+  ))+
+  geom_line()
+
+```
+
+```{r}
+kenia.pr %>% 
+  ggplot(aes(
+    x = longitude,
+    y = latitude, 
+    color = pr,
+    size = positive
+  ))+
+  borders("world", regions="kenya")+
+  geom_point()+
+  scale_color_gradient2(low = "orange", high = "red", midpoint = .5, labels = scales::percent_format())+
+  theme(legend.position = "bottom")
+
+#?borders
+#maps:map()
+#help(package="maps')
+#borders("world", regions="kenya")
+```
+
+```{r}
+kenia.pr %>% 
+  arrange(pr) %>% 
+  ggplot(aes(
+    x = longitude,
+    y = latitude, 
+    color = pr,
+  ))+
+  borders("world", regions="kenya")+
+  geom_point()+
+  scale_color_gradient2(low = "orange", high = "red", midpoint = .5, labels = scales::percent_format())+
+  theme_void()+
+  coord_map()
+```
+```{r}
+min(kenia.pr$year_start)
+max(kenia.pr$year_start)
+
+```
+
+
+
+```{r}
+kenia.pr %>% 
+  arrange(pr) %>% 
+  filter(!is.na(year_start)) %>% 
+   ggplot(aes(
+    x = longitude,
+    y = latitude,
+    color = pr
+  ))+
+  borders("world", regions = "Kenya")+
+  geom_point()+
+  scale_color_gradient2(low = "blue", high = "red", midpoint = .5, labels = scales::percent_format())+
+  facet_wrap(~year_start)+
+  theme_void()+
+  coord_map()+
+  labs(color = "Prevalencia")
+```
+```{r}
+kenia.pr %>% 
+   count(species, n()) 
+```
+
+```{r}
+malari.inc <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2018/2018-11-13/malaria_inc.csv") %>% 
+  view()
+
+malaria.inc.processed <- malari.inc %>% 
+  setNames(c("pais","codigo", "year", "incidencia")) %>% 
+  mutate(incidencia = round(incidencia /1000,4))  
+  
+```
+
+```{r}
+malaria.inc.processed %>% 
+  filter(pais %in% sample(unique(pais),8)) %>% 
+  ggplot(aes(
+    x = year,
+    y = incidencia,
+    color = pais
+  ))+
+  geom_line()+
+  scale_y_continuous(labels = scales::percent_format())
+```
+
+### looking at 2015 levels and the change from 2015 to 2000
+
+```{r}
+malaria.inc.processed %>% 
+  group_by(pais) %>% 
+  mutate(current = last(incidencia),
+         change = last(incidencia) / first(incidencia)) %>% 
+  arrange(desc(change))
+```
+```{r}
+malaria.inc.processed %>% 
+  mutate(year = paste0("Y", year)) %>% 
+  spread(year, incidencia) %>% 
+  mutate(current = Y2015,
+         change = Y2015/Y2000) %>% 
+  arrange(change)
+```
+```{r}
+malaria.spread <- malaria.inc.processed %>% 
+  mutate(year = paste0("Y", year)) %>%
+  spread(year, incidencia)
+
+view(malaria.spread)
+```
+
+
+
+```{r}
+malaria.spread %>%  
+  filter(pais != "Turkey",
+         !is.na(codigo)) %>% 
+  mutate(current = Y2015,
+         change = Y2015-Y2000) %>% 
+  ggplot(aes(
+    x = current,
+    y = change
+  ))+
+  geom_point()+
+  geom_text(aes(
+    label = codigo
+  ), vjust = 1, hjust = 1, size = 2.5)+
+  scale_y_continuous(labels = scales::percent_format())
+```
+
+
+```{r}
+world <- map_data("world") %>% 
+  filter(region != "Antarctica")
+
+view(world)
+```
+
+```{r}
+
+map_data("world") %>% tbl_df()
+
+malaria.spread %>% 
+  anti_join(map_data("world"), by = c(pais = "region"))
+  
+maps::iso3166 %>% 
+  tbl_df()
+
+malaria.spread %>% 
+  inner_join(maps::iso3166 %>% 
+               select(a3, mapname), by =c(codigo = "a3")) %>%  
+  right_join(world, by = c(mapname = "region")) %>% 
+  ggplot(aes(
+    x = long,
+    y = lat,
+    group =group,
+    fill = Y2015
+  ))+
+  geom_polygon()+
+  theme_void()
+```
+
+```{r}
+malaria.spread %>% 
+  inner_join(maps::iso3166 %>% 
+               select(a3, mapname), by =c(codigo = "a3")) %>%  
+  inner_join(world, by = c(mapname = "region")) %>% 
+  ggplot(aes(
+    x = long,
+    y = lat,
+    group =group,
+    fill = Y2015
+  ))+
+  geom_polygon()+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = .20, labels = scales::percent_format())+
+  coord_map()+
+  theme_void()
+```
+
+```{r}
+malaria.inc.processed %>% 
+  filter(incidencia < 1) %>% 
+  inner_join(maps::iso3166 %>% 
+               select(a3, mapname), by =c(codigo = "a3")) %>%  
+  inner_join(world, by = c(mapname = "region")) %>% 
+  ggplot(aes(
+    x = long,
+    y = lat,
+    group =group,
+    fill = incidencia
+  ))+
+  geom_polygon()+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = .20, labels = scales::percent_format())+
+  coord_map()+
+  facet_wrap(~year)+
+  theme_void()+
+  labs(title = "Incidencia de Malaria alrededor del mundo")
+```
+
+### muertes por malaria en el mundo 
+
+```{r}
+malaria.deaths <-read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2018/2018-11-13/malaria_deaths.csv") %>% 
+  view()
+```
+```{r}
+malaria.deaths.processed <- malaria.deaths %>% 
+  setNames(c("pais","codigo", "year", "muertos")) 
+```
+
+```{r}
+malaria.deaths.processed %>% 
+  filter(pais %in% sample(unique(pais),8)) %>% 
+  ggplot(aes(
+    x = year,
+    y = muertos,
+    color = pais
+  ))+
+  geom_line()+
+  scale_y_continuous(labels = scales::percent_format())+
+  labs(title = "Muertos por cada 100000 personas")
+```
+
+```{r}
+malaria.deaths.processed %>% 
+  filter(year == 2000) %>% 
+  inner_join(maps::iso3166 %>% 
+               select(a3, mapname), by =c(codigo = "a3")) %>% 
+  inner_join(world, by = c(mapname = "region")) %>% 
+  #right_join(world, by = c(mapname = "region")) %>% 
+  ggplot(aes(
+    x = long,
+    y = lat,
+    group =group,
+    fill = muertos
+  ))+
+  geom_polygon()+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = 100)+
+  coord_map()+
+  theme_void()+
+  labs(title = "Muertos por Malaria alrededor del mundo")
+```
+
+```{r}
+#install.packages("fuzzyjoin")
+#install.packages("stringr")
+
+malaria.country.data <- malaria.deaths.processed %>% 
+  filter(year == 2000) %>% 
+  inner_join(maps::iso3166 %>% 
+               select(a3, mapname), by =c(codigo = "a3")) %>% 
+  mutate(mapname = str_remove(mapname,"\\(.*"))
+
+
+
+malaria.map.data <- map_data("world") %>% 
+    filter(region != "Antarctica") %>% 
+    tbl_df() %>% 
+    inner_join(malaria.country.data, by = c(region = "mapname")) 
+
+
+  map_data("world") %>% 
+    filter(region != "Antarctica") %>% 
+    tbl_df() %>% 
+    inner_join(malaria.country.data, by = c(region = "mapname")) %>% 
+    filter(year == 2000) %>% 
+  ggplot(aes(
+    x = long,
+    y = lat,
+    group =group,
+    fill = muertos
+  ))+
+  geom_polygon()+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = 100)+
+    theme_void()+
+    labs(title = "Muertos por malaria al rededor del mundo", 
+    fill = "Muertos por cada 100000 personas")+
+    theme(legend.position = "bottom")
+
+```
+
+```{r}
+malaria.map.data %>%
+  ggplot(aes(
+    x = long,
+    y = lat,
+    group =group,
+    fill = muertos
+  ))+
+  geom_polygon()+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = 100)+
+    theme_void()+
+    labs(title = "Muertos por malaria al rededor del mundo", 
+    fill = "Muertos por cada 100000 personas")+
+    theme(legend.position = "bottom")+
+  transition_manual(year)
+
+```
+
+```{r}
+#install.packages("countrycode")
+
+malaria.map.data %>%
+  mutate(continent = countrycode(codigo, "iso3c", "continent")) %>% 
+  filter(continent == "Africa") %>% 
+  ggplot(aes(
+    x = long,
+    y = lat,
+    group =group,
+    fill = muertos
+  ))+
+  geom_polygon()+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = 100)+
+    theme_void()+
+    labs(title = "Muertos por malaria al rededor del mundo", 
+    fill = "Muertos por cada 100000 personas")+
+    theme(legend.position = "bottom")+
+  transition_manual(year)
+```
+
+
+
+
+
+
+
+
+
+
+
+
