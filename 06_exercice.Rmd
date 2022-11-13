@@ -1,0 +1,343 @@
+---
+title: "06_exercice"
+author: "jorge_callejo"
+date: "2022-11-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(stringr)
+library(widyr)
+library(ggraph)
+library(igraph)
+theme_set(theme_light())
+```
+
+```{r data, include=FALSE}
+dinner <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2018/2018-11-20/thanksgiving_meals.csv") %>% 
+  mutate(family_income = fct_reorder(family_income, parse_number(family_income)))
+```
+
+```{r celebrate, include=TRUE}
+dinner %>% 
+  count(celebrate)
+```
+
+```{r age, include=TRUE}
+dinner %>% 
+  count(age) %>% 
+  ggplot(aes(
+    x = age,
+    y = n,
+    fill = "orange"
+  ))+
+  geom_col()
+```
+
+```{r age2, include=TRUE}
+dinner %>% 
+  filter(!is.na(age)) %>% 
+  ggplot(aes(
+    x = age,
+    fill  = gender
+  ))+
+  geom_bar()+
+  #geom_bar(position = "dodge")
+  theme(legend.position = "bottom")
+```
+
+```{r region, include=FALSE}
+dinner %>% 
+  count(us_region)
+```
+
+
+Todos se sirven como plato principal el día de acción de gracias pavo
+
+```{r turkey, include=FALSE}
+dinner %>% 
+  count(main_dish, sort = TRUE)
+```
+
+plato principal y platillo tipico
+```{r main_prep, include=FALSE}
+dinner %>% 
+      count(main_dish, main_prep, sort = TRUE)
+```
+Rellenos habituales 
+```{r stuffing, include=FALSE}
+dinner %>% 
+    count(stuffing, sort = TRUE)
+```
+Servirse arandano
+```{r cranberry, include=FALSE}
+dinner %>% 
+  count(cranberry, sort = TRUE)
+```
+
+Servirse salsas
+```{r gravy, include=FALSE}
+dinner %>% 
+  count(gravy, sort = TRUE)
+```
+```{r family_income, include=TRUE}
+dinner %>% 
+  filter(cranberry %in% c("Canned", "Homemade")) %>% 
+  group_by(family_income) %>% 
+  summarise(homemade = mean(cranberry == "Homemade"),
+            size = n()) %>% 
+  ggplot(aes(
+    x = family_income,
+    y = homemade,
+    group = 1 #se require para la linea
+  ))+
+  geom_point()+
+  geom_line()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+calculo de intervalos confiables 
+```{r intervalos, include=TRUE}
+dinner %>% 
+
+  filter(cranberry %in% c("Canned", "Homemade")) %>% 
+  group_by(family_income) %>% 
+  summarise(homemade = sum(cranberry == "Homemade"),
+            total = n(),
+            low = round(qbeta(0.025, homemade+.5, total - homemade+.5),2),
+            high = round(qbeta(0.975, homemade+.5, total - homemade+.5),2)
+            )%>%
+  ggplot(aes(
+    x = family_income,
+    y = homemade/total,
+    group = 1 
+  ))+
+  geom_point()+
+  geom_ribbon(aes(ymin =low, ymax = high), alpha= .4)+
+  scale_y_continuous(labels = scales::percent_format())+
+  geom_line()+
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs(x = "Family income",
+       y = "% serving homemade")
+```
+
+```{r celebrate.desviacion, include=TRUE}
+dinner %>% 
+  group_by(family_income) %>% 
+  summarise(celebrate = sum(celebrate == "Yes"),
+            total = n(),
+            low = round(qbeta(0.025, celebrate+.5, total - celebrate+.5),2),
+            high = round(qbeta(0.975, celebrate+.5, total - celebrate+.5),2)
+            )%>%
+  ggplot(aes(
+    x = family_income,
+    y = celebrate/total,
+    group = 1 
+  ))+
+  geom_point()+
+  geom_ribbon(aes(ymin =low, ymax = high), alpha= .4)+
+  scale_y_continuous(labels = scales::percent_format())+
+  geom_line()+
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs(x = "Family income",
+       y = "% celebrate thanksgiving")
+
+# estudiar jeffreys interval
+```
+```{r side, include=FALSE}
+dinner %>% 
+  select(id, starts_with("side"),
+         starts_with("pie"),
+         starts_with("dessert")) %>% 
+  gather(type, value, -id) %>% 
+  filter(!is.na(value)) %>% 
+  mutate(type = str_remove(type, "\\d+")) %>% 
+  count(type)
+```
+```{r food, include=FALSE}
+food.gathered <-dinner %>% 
+  select(id, starts_with("side"),
+         starts_with("pie"),
+         starts_with("dessert")) %>% 
+  select(-side15, -pie13, -dessert12) %>% 
+  gather(type, value, -id) %>% 
+  filter(!is.na(value),
+         !value %in% c("None", "Other (please specify)")) %>% 
+  mutate(type = str_remove(type, "\\d+"))
+```
+
+```{r}
+n_respondents = n_distinct(food.gathered$id)
+
+
+food.gathered %>% 
+  count(type, value, sort = TRUE) %>% 
+  mutate(value = fct_reorder(value, n)) %>% 
+  head(15) %>% 
+  ggplot(aes(
+    x = value,
+    y = n/ n_respondents,
+    fill= type
+  ))+
+  geom_col()+
+  coord_flip()+
+  scale_y_continuous(labels = scales::percent_format())+
+  theme(legend.position = "bottom")+
+  labs(x = "", 
+       y = "% of respondents")
+
+```
+
+## ¿Cuales son los postres, guarniciiones y tartas mas comunes en el dia de acción de gracias?
+
+```{r}
+n_respondents = n_distinct(food.gathered$id)
+
+
+food.gathered %>% 
+  count(type, value, sort = TRUE) %>% 
+  mutate(value = fct_reorder(value, n)) %>% 
+  ggplot(aes(
+    x = value,
+    y = n/ n_respondents,
+    fill= type
+  ))+
+  geom_col()+
+  coord_flip()+
+  scale_y_continuous(labels = scales::percent_format())+
+  theme(legend.position = "none")+
+  facet_wrap(~type, scales = "free_y", ncol = 1)+
+  labs(x = "", 
+       y = "% of respondents")
+
+```
+## ¿Como difieren las porciones segun los ingresos?
+
+```{r}
+food.gathered %>% 
+  inner_join(dinner, by = "id") %>% 
+  mutate(age_number = parse_number(age)) %>% 
+  group_by(value) %>% 
+  summarise(average_age = round(mean(age_number, na.rm =TRUE),0), total = n()) %>% 
+  arrange(desc(average_age)) %>% 
+  ggplot(aes(
+    x = value,
+    y = average_age
+  ))+
+  geom_point()+
+  coord_flip()
+
+```
+
+## Comida por region
+```{r food.region, include=FALSE}
+food.region <- food.gathered %>% 
+  inner_join(dinner, by = "id") %>% 
+  group_by(us_region) %>% 
+  mutate(respondents = n_distinct(id)) %>% 
+  count(us_region, respondents, type, value) %>% 
+  ungroup() %>% 
+  mutate(percent = round(n/respondents,2))
+
+```
+```{r}
+food.region %>% 
+  filter(value == "Apple") %>% 
+  arrange(desc(percent))
+```
+
+```{r}
+food.region %>% 
+  filter(value == "Pumpkin") %>% 
+  arrange(desc(percent))
+```
+
+¿Tu familia ora antes de comer?
+```{r}
+#install.packages("ebbr")
+food.gathered %>% 
+  inner_join(dinner, by = "id") %>% 
+  filter(!is.na(prayer)) %>% 
+  group_by(type, value) %>% 
+  summarise(prayer = sum(prayer == "Yes"),
+            total = n(), 
+            percent = round(prayer/total,2)) %>% 
+  arrange(desc(percent))
+```
+
+## ¿cuales son los postres, guarniciones y tartas que se comen juntos?
+
+```{r}
+#install.packages("widyr")
+food.gathered %>% 
+  pairwise_cor(value, id, sort = TRUE)
+```
+```{r}
+#install.packages("widyr")
+
+food.gathered %>% 
+  pairwise_cor(value, id, sort = TRUE) %>% 
+  filter(item1 == "Pumpkin") 
+```
+
+```{r}
+food.cors <- food.gathered %>% 
+  pairwise_cor(value, id, sort= TRUE)
+```
+
+## network foods
+
+```{r}
+#install.packages("ggraph")
+#install.packages("igraph")
+food.cors %>% 
+  head(75) %>% 
+  graph_from_data_frame() %>% 
+  ggraph()+
+  geom_edge_link()+
+  #geom_edge_link(aes(width = correlation))+
+  geom_node_point()+
+  geom_node_text(aes(label = name),
+                 size = 4.5,
+                 vjust = 1,
+                 hjust = 1)+
+  theme_void()
+```
+
+
+```{r}
+
+food.types <- food.gathered %>% 
+  count(value, type, sort = TRUE)
+
+
+food.cors %>% 
+  head(50) %>% 
+  graph_from_data_frame(vertices = food.types) %>% 
+  ggraph()+
+  geom_edge_link()+
+  geom_node_point(aes(color = type, size = n))+
+  geom_node_text(aes(label = name),
+                 size = 4.5,
+                 vjust = 1,
+                 hjust = 1,
+                 repel = TRUE)+
+  theme_void()+
+  theme(legend.position = "bottom")+
+  labs(
+    title =  "Comidas relacionadas con la cena de dia de accion de gracias",
+    color = "",
+    size = "% of respondents"
+  )
+```
+
+
+
+
+
