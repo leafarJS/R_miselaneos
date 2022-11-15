@@ -1,0 +1,78 @@
+---
+title: "06_exercice"
+author: "jorge_callejo"
+date: "2022-11-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(scales)
+theme_set(theme_minimal())
+```
+
+```{r}
+data <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2018/2018-11-27/baltimore_bridges.csv")  %>% 
+  select(-vehicles) %>% 
+  mutate(inspection_yr = inspection_yr + 2000,
+         decade = 10 *(yr_built %% 10), sort = TRUE)
+```
+
+
+
+```{r}
+data %>% 
+  filter(yr_built >= 1900) %>% 
+  count(yr_built, sort = TRUE) %>% 
+  ggplot(aes(
+    x = yr_built,
+    y = n
+  ))+
+  geom_point()+
+  geom_line()
+```
+
+```{r}
+data %>% 
+  filter(yr_built >= 1900) %>% 
+  count(decade = 10 * (yr_built %% 10), sort = TRUE) %>% 
+  ggplot(aes(
+    x = decade,
+    y = n
+  ))+
+  geom_point()+
+  geom_line()+
+  expand_limits(y = 0)+
+  labs(y = "# de puentes en baltimore construidos por decada")
+```
+##¿Como depende el estado de los puentes de su antigüedad?
+
+```{r}
+max(data$yr_built)
+min(data$yr_built)
+```
+```{r}
+data %>% 
+  count(inspection_yr, sort = TRUE)
+```
+```{r}
+data %>% 
+  count(bridge_condition, sort = TRUE)
+```
+```{r}
+data %>% 
+  filter(yr_built >= 1990) %>% group_by(decade)%>%
+  summarise(pct_good = round(mean(bridge_condition == "Fair"),2), 
+            total = n()) %>% 
+  ggplot(aes(
+    x = decade,
+    y =  pct_good
+  ))+
+  geom_point()+
+  geom_line()+
+  scale_y_continuous(labels = percent_format())+
+  expand_limits(y = 0)
+```
+
