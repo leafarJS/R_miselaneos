@@ -17,9 +17,14 @@ theme_set(theme_minimal())
 data <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2018/2018-11-27/baltimore_bridges.csv")  %>% 
   select(-vehicles) %>% 
   mutate(inspection_yr = inspection_yr + 2000,
-         decade = 10 *(yr_built %% 10), sort = TRUE)
+         decade = ifelse(10 * (yr_built %% 10) == 0, 2000, 10 * (yr_built %% 10)+1900),
+         responsibility = fct_lump(responsibility, 4),
+         county = str_to_title(county))
 ```
 
+```{r}
+str(data)
+```
 
 
 ```{r}
@@ -37,7 +42,7 @@ data %>%
 ```{r}
 data %>% 
   filter(yr_built >= 1900) %>% 
-  count(decade = 10 * (yr_built %% 10), sort = TRUE) %>% 
+  count(decade, sort = TRUE) %>% 
   ggplot(aes(
     x = decade,
     y = n
@@ -57,22 +62,282 @@ min(data$yr_built)
 data %>% 
   count(inspection_yr, sort = TRUE)
 ```
+
+
+
 ```{r}
 data %>% 
   count(bridge_condition, sort = TRUE)
 ```
 ```{r}
 data %>% 
-  filter(yr_built >= 1990) %>% group_by(decade)%>%
-  summarise(pct_good = round(mean(bridge_condition == "Fair"),2), 
+ filter(yr_built >= 1900) %>% 
+  group_by(decade)%>%
+  summarise(pct_good = round(mean(bridge_condition == "Good"),2), 
             total = n()) %>% 
   ggplot(aes(
     x = decade,
     y =  pct_good
   ))+
-  geom_point()+
   geom_line()+
   scale_y_continuous(labels = percent_format())+
   expand_limits(y = 0)
+
 ```
+
+
+```{r}
+data %>% 
+  filter(owner != responsibility) %>% 
+  count(owner, responsibility, sort = TRUE)
+```
+```{r}
+data %>%
+  na.omit(responsibility) %>% 
+count(responsibility = fct_lump(responsibility, 6), sort = TRUE) %>% 
+  mutate(responsibility = fct_reorder(responsibility, n)) %>% 
+  ggplot(aes(
+    x = responsibility,
+    y = n
+  ))+
+  geom_col()+
+  coord_flip()
+  
+```
+
+```{r}
+data %>%
+  filter(yr_built >= 1900) %>% 
+  replace_na(list(responsibility = "Other")) %>% 
+  group_by(responsibility = fct_lump(responsibility, 4),
+           decade) %>% 
+  summarize(pct_good = round(mean(bridge_condition == "Good"),2),
+            total = n()) %>% 
+  filter(responsibility != "Other") %>% 
+  ggplot(aes(
+    x = decade,
+    y = pct_good,
+    color = responsibility
+    ))+
+  geom_line()+
+  scale_y_continuous(labels = percent_format())+
+  expand_limits(y = 0)+
+  labs(y = " % de puentes en buenas condiciones")
+```
+
+
+```{r}
+data %>% 
+  ggplot(aes(avg_daily_traffic))+
+  geom_histogram()
+```
+
+```{r}
+data %>% 
+  ggplot(aes(avg_daily_traffic))+
+  geom_histogram(bins = 30)+
+  scale_x_log10(labels = comma_format())
+```
+```{r}
+data %>% 
+filter(yr_built >= 1990) %>% 
+  group_by(traffic_category = cut(avg_daily_traffic, c(0,1000,10000,Inf),
+                                  labels = c("<1.000", "1.000 - 10.000", ">10.000"))) %>% 
+  summarise(pct_good = round(mean(bridge_condition == "Good"),2),
+            total = n())
+```
+```{r}
+data %>% 
+  ggplot(aes(
+    x = long,
+    y = lat,
+    color = avg_daily_traffic
+  ))+
+  borders("state", regions = "Maryland")+
+  geom_point()+
+  scale_color_gradient2(low = "blue",
+                        high = "red",
+                        midpoint = log10(mean(data$avg_daily_traffic)),
+                        trans = "log10",
+                        labels = comma_format())+
+  coord_map()+
+  theme_void()+
+  labs(title = "Puentes mas transitados")
+```
+
+```{r}
+data %>% 
+  filter(yr_built >= 1900) %>% 
+  ggplot(aes(
+    x = long,
+    y = lat,
+    color = yr_built
+  ))+
+  borders("state", regions = "Maryland")+
+  geom_point()+
+  coord_map()+
+  theme_void()+
+  labs(title = "Puentes por decada de construcción")
+```
+
+
+```{r}
+data %>% 
+  count(county, sort= TRUE)
+```
+
+```{r}
+data %>% 
+  filter(yr_built >= 1900) %>% 
+  ggplot(aes(
+    x = long,
+    y = lat,
+    color = county
+  ))+
+  borders("state", regions = "Maryland")+
+  geom_point()+
+  coord_map()+
+  theme_void()+
+  labs(title = "Puentes por condado")
+```
+
+
+```{r}
+data %>% 
+  filter(yr_built >= 1900) %>% 
+  group_by(county, decade) %>% 
+  summarise(pct_good = mean(bridge_condition == "Good"),
+            total = n()) %>% 
+  arrange(county, decade) %>% 
+  ggplot(aes(
+    x = decade,
+    y = pct_good,
+    color = county
+  ))+
+  geom_line()+
+  scale_y_continuous(labels = percent_format())+
+  expand_limits(y = 0)+
+  labs(y = "Tendencia de puentes en buen estado")
+```
+
+
+```{r}
+data %>% 
+  mutate(good = bridge_condition == "Good") %>% 
+  glm(good~ yr_built, data = .) %>% 
+  summary()
+```
+
+```{r}
+library(broom)
+#fit a logistic model
+bridges <- data %>% 
+  filter(yr_built > 1900)
+
+model <- bridges %>% 
+  mutate(good = bridge_condition == "Good") %>% 
+  glm(good~ yr_built, data = ., family = "binomial") 
+
+augment(model, bridges, type.predict = "response") %>% 
+  ggplot(aes(
+    x = yr_built,
+    y = .fitted
+  ))+
+  geom_line()+
+  expand_limits(y = 0)
+```
+
+```{r}
+library(splines)
+model <- bridges %>% 
+  mutate(good = bridge_condition == "Good") %>% 
+  glm(good~ ns(yr_built, 3
+               ), data = ., family = "binomial") 
+
+augment(model, bridges, type.predict = "response") %>% 
+  ggplot(aes(
+    x = yr_built,
+    y = .fitted
+  ))+
+  geom_line()+
+  expand_limits(y = 0)
+```
+
+```{r}
+library(splines)
+model <- bridges %>%
+  mutate(good = bridge_condition == "Good") %>%
+  glm(good~ ns(yr_built, 4)+ responsibility, data = ., family = "binomial")
+
+augment(model, bridges, type.predict = "response") %>%
+  unname() %>% 
+  ggplot(aes(
+    x = yr_built,
+    y = .fitted,
+    color = responsibility
+  ))+
+  geom_line()+
+  expand_limits(y = 0)+
+  labs(y = " % de predicción de mantenimiento ")
+```
+
+```{r}
+summary(model)
+```
+
+```{r}
+model <- bridges %>% 
+  mutate(good = bridge_condition == "Good") %>% 
+  glm(good ~ ns(yr_built, 3) + responsibility + county, data = ., family = "binomial") 
+
+augment(model, bridges, type.predict = "response") %>% 
+  ggplot(aes(
+    x = yr_built,
+    y = .fitted,
+    color = responsibility
+  ))+
+  geom_line()+
+  scale_y_continuous(labels = percent_format())+
+  facet_wrap(~county)+
+  expand_limits(y = 0)+
+  labs(y = " % de predicción de mantenimiento ")
+```
+
+```{r}
+model <- bridges %>% 
+  mutate(good = bridge_condition == "Good") %>% 
+  glm(good ~ ns(yr_built, 4) + responsibility + county, data = ., family = "binomial")
+
+model %>%  
+  tidy(conf.int = TRUE) %>% 
+  filter(str_detect(term, "responsibility|county")) %>% 
+  mutate(term = reorder(term, estimate)) %>% 
+  ggplot(aes(
+    x = estimate,
+    y = term
+  ))+
+  geom_point()+
+  geom_errorbar(aes(
+    xmin = conf.low,
+    xmax = conf.high
+  ))+
+  geom_vline(xintercept = 0, color = "red", lty = 2)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
