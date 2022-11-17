@@ -1,0 +1,280 @@
+---
+title: "08_exercice"
+author: "jorge_callejo"
+date: "2022-11-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(scales)
+theme_set(theme_minimal())
+```
+
+```{r}
+data <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2018/2018-12-04/medium_datasci.csv") %>% 
+  select(-x1) %>% 
+  mutate(post_id = row_number())
+```
+
+```{r}
+medium.precessed <- data
+```
+
+```{r}
+medium.precessed %>% 
+  count(publication, sort = TRUE)
+```
+
+```{r}
+medium.precessed %>% 
+  summarise_at(vars(starts_with("tag")), sum) %>% 
+  view()
+
+```
+
+```{r}
+medium.gathered <- medium.precessed %>% 
+  gather(tag, value, starts_with("tag")) %>% 
+  mutate(tag = str_remove(tag, "tag.")) %>% 
+  filter(value == 1) 
+```
+
+```{r}
+medium.gathered %>% 
+  count(tag, sort = TRUE)
+```
+```{r}
+medium.gathered %>% 
+  group_by(tag) %>% 
+  summarise(median.claps = median(claps)) %>% 
+  arrange(desc(median.claps)) #claps aplausos
+```
+
+```{r}
+medium.precessed %>% 
+  ggplot(aes(
+    x = claps
+  ))+
+  geom_histogram(bins = 30)
+```
+
+
+
+```{r}
+medium.precessed %>% 
+  ggplot(aes(
+    x = claps
+  ))+
+  geom_histogram(bins = 30)+
+  scale_x_log10(labels = scales::comma_format())
+```
+
+```{r}
+medium.precessed %>% 
+  mutate(reading_time = pmin(10, reading_time)) %>% 
+  ggplot(aes(
+    x = reading_time
+  ))+
+  geom_histogram(bins = 30, fill = "orange")+
+  scale_x_continuous(breaks = seq(2,10,2),
+                     labels = c(seq(2,8,2),"+10"))+
+  labs(x = "tiempo de lectura medio")
+```
+
+```{r}
+medium.gathered %>% 
+  group_by(tag) %>% 
+  summarise(reading_time = round(mean(reading_time),2)) %>% 
+  arrange(desc(reading_time))
+```
+
+```{r}
+#install.packages("tidytext")
+library(tidytext)
+medium.words <-medium.precessed %>% 
+  filter(!is.na(title)) %>% 
+  select(post_id, title, subtitle, year, reading_time, claps) %>% 
+  unnest_tokens(word, title) %>% 
+  anti_join(stop_words, by = "word") %>% 
+  filter(!(word %in% c("de", "en", "la", "para")),
+         str_detect(word, "[a-z]"))
+```
+
+
+
+```{r}
+medium.words %>% 
+  count(word, sort = TRUE) %>% 
+  head(10)
+```
+
+```{r}
+medium.words %>% 
+  count(word, sort = TRUE) %>% 
+  mutate(word = fct_reorder(word, n)) %>% 
+  head(10) %>% 
+  ggplot(aes(
+    x = word,
+    y = n,
+    fill = word
+  ))+
+  geom_col()+
+  coord_flip()+
+  theme(legend.position = "none")
+```
+
+```{r}
+medium.words %>% 
+  count(word, sort = TRUE) %>% 
+  mutate(word = fct_reorder(word, n)) %>% 
+  head(20) %>% 
+  ggplot(aes(
+    x = word,
+    y = n
+  ))+
+  geom_col(fill = "orange")+
+  coord_flip()+
+  labs(title = "Palabras comunes en los titulos de las publicaciones")
+```
+
+```{r}
+medium.word.filtered <- medium.words %>% 
+  add_count(word) %>% 
+  filter(n >= 500)
+```
+
+
+```{r}
+tag.claps <- medium.word.filtered %>% 
+  group_by(word) %>% 
+  summarise(median_claps = median(claps),
+            mean_geometric_claps = round(exp(mean(log(claps + 1)))-1,1),
+            ocurrences = n()
+            ) %>% 
+  arrange(desc(median_claps)) 
+```
+
+```{r}
+library(widyr)
+library(dplyr)
+library(ggraph)
+library(igraph)
+library(ggplot2)
+
+top.word.cor <- medium.word.filtered %>% 
+  select(post_id, word) %>% 
+  pairwise_cor(word, post_id, sort = TRUE) %>% 
+  head(150)
+  
+```
+
+```{r}
+top.word.cor %>% 
+  graph_from_data_frame() %>% 
+  ggraph()+
+  geom_edge_link()+
+  geom_node_point()+
+  geom_node_text(aes(
+    label=name
+  ), 
+  repel = TRUE)+
+  theme_void()
+
+```
+
+```{r}
+top.word.cor %>% 
+  graph_from_data_frame() %>% 
+ggraph()+
+  geom_edge_link(width=0.2,colour="grey")+
+  geom_node_point(col="black",size=0.3)+
+  theme_graph()+ 
+  geom_node_text(aes(
+    label=name
+  ), 
+  repel = TRUE)+
+  theme_void()
+```
+
+```{r}
+vertices.claps <- tag.claps %>% 
+  filter(word %in% top.word.cor$item1 |
+         word %in% top.word.cor$item2) 
+
+
+top.word.cor %>% 
+  graph_from_data_frame(vertices = vertices.claps) %>% 
+  ggraph()+  
+  geom_edge_link()+
+  geom_node_point(aes(size = ocurrences,
+                      color = mean_geometric_claps))+
+  geom_node_text(aes(label = name), repel = TRUE)+
+  scale_color_gradient2(low = "blue",
+                        high = "red",
+                        midpoint = 10)+
+  theme_void()+
+  labs(title = "correlación de las palabras mas buscadas en los articulos",
+       subtitle = "Calculado con una media geometrica", 
+      color = "claps (mean)")+
+  theme(legend.position = "bottom")
+
+  
+
+```
+
+## Predicción  # de aplausos basado en titulos y tags
+
+```{r}
+# fit a LASSO model 
+library(glmnet)
+
+post.word.matrix <- medium.word.filtered %>% 
+  distinct(post_id, word, claps) %>% 
+  cast_sparse(post_it, word)
+
+
+claps <- medium.precessed$claps[match(rownames(post.word.matrix), medium.precessed$post_id)]
+
+lasso.model <- cv.glmnet(post.word.matrix, log(claps + 1))
+
+```
+
+```{r}
+
+plot(lasso.model)
+```
+
+
+```{r}
+library(broom)
+library(tidyr)
+library(glmnet)
+
+tidy(lasso.model$glmnet.fit) %>% 
+  filter(term %in% c("hadoop", "learning", "gdpr", "startup", "marketing")) %>% 
+  ggplot(aes(
+    x = lambda,
+    y = estimate,
+    color = term
+  ))+
+  geom_line()+
+  scale_x_log10()
+
+
+tidy(lasso.model$glmnet.fit) %>% 
+  filter(lambda == lasso.model$lambda.min) %>% 
+  arrange(desc(estimate)) %>% 
+  view()
+```
+
+
+
+
+
+
+
