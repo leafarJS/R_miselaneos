@@ -1,0 +1,302 @@
+---
+title: "09_exercice"
+author: "jorge_callejo"
+date: "2022-11-17"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+library(scales)
+library(janitor)
+library(lubridate)
+theme_set(theme_minimal())
+```
+
+```{r}
+# You can use this url to download the data directly into R (will take a few seconds)
+data <- read_csv("https://data.cityofnewyork.us/api/views/43nn-pn8j/rows.csv")
+
+# Cleaning names with janitor, sampling 300,000 records, and dropping some variables
+restaurant <- data %>% 
+        janitor::clean_names() %>%
+        select(-phone, -grade_date, -record_date, -building, -street) %>% 
+  mutate(inspection_date = mdy(inspection_date)) %>% 
+  separate(inspection_type, c("inspection_program", "inspection_type"), sep = " / ")
+
+view(restaurant)
+
+```
+
+```{r}
+restaurant %>% 
+  count(dba, camis, sort = TRUE)
+```
+
+```{r}
+restaurant %>% 
+  count(year = year(inspection_date))
+```
+
+```{r}
+restaurant %>% 
+  count(grade, sort = TRUE)
+```
+```{r}
+restaurant %>% 
+  count(violation_description, sort = TRUE) %>% 
+  head() %>% 
+  pull(violation_description)
+```
+
+```{r}
+restaurant %>% 
+  count(violation_code, violation_description, sort = TRUE)
+```
+
+```{r}
+restaurant %>%
+  filter(camis == 50089761, inspection_date == "2022-03-24" ) 
+
+restaurant%>% 
+count(camis, dba, inspection_date, sort = TRUE) 
+```
+
+	
+```{r}
+restaurant %>% 
+  count(cuisine_description, sort = TRUE)
+```
+
+```{r}
+restaurant %>% 
+  count(critical_flag, sort = TRUE)
+
+```
+
+```{r}
+inspection <-restaurant %>% 
+  group_by(camis,
+           dba, 
+           boro, 
+           zipcode,
+           cuisine_description,
+           inspection_date,
+           action,
+           score,
+           grade,
+           inspection_type, 
+           inspection_program,
+           critical_flag,
+           violation_code,
+           violation_description) %>% 
+  summarise(critical_violation = sum(critical_flag == "Critical", na.rm = TRUE),
+            not_critical_violation = sum(critical_flag == "Not Critical", na.rm = TRUE)) %>% 
+  ungroup()
+
+
+```
+
+```{r}
+inspection %>% 
+  count(inspection_type, sort = TRUE)
+```
+```{r}
+inspection %>% 
+  count(inspection_program, sort = TRUE)
+```
+
+```{r}
+inspection %>% 
+  filter(inspection_program == "Cycle Inspection ") %>% 
+  count(grade, sort = TRUE) 
+```
+
+
+```{r}
+most.recent.cycle.inspection <- inspection %>% 
+  filter(inspection_program == "Cycle Inspection ",
+         inspection_type == " Initial Inspection")%>% 
+  arrange(desc(inspection_date)) %>% 
+  distinct(camis, .keep_all = TRUE)
+
+```
+
+```{r}
+most.recent.cycle.inspection %>% 
+  group_by(cuisine_description) %>% 
+  summarise(avg_score = round(mean(score),2),
+            median_score = round(median(score),2),
+            restaurant = n()) %>% 
+  arrange(desc(restaurant))
+```
+
+```{r}
+most.recent.cycle.inspection %>% 
+  group_by(boro) %>% 
+  summarise(avg_score = round(mean(score),2),
+            median_score = round(median(score),2),
+            restaurant = n()) %>% 
+  arrange(desc(restaurant))
+```
+
+```{r}
+most.recent.cycle.inspection %>% 
+  ggplot(aes(
+    x = score
+  ))+
+  geom_histogram(bins = 30)
+```
+
+```{r}
+cuisine.conf.inter <-  most.recent.cycle.inspection %>% 
+  group_by(cuisine_description) %>% 
+  summarise(avg_score = round(mean(score),2),
+            median_score = round(median(score),2),
+            restaurant = n()) %>%
+  mutate(xmin = sd(median_score)) %>% 
+  arrange(desc(restaurant)) 
+
+
+cuisine.conf.inter %>% 
+  mutate(cuisine_description = fct_reorder(cuisine_description, median_score)) %>% 
+  head(20) %>% 
+  ggplot(aes(
+    x = median_score,
+    y = cuisine_description
+  ))+
+  geom_point()
+```
+
+```{r}
+by.dba <- most.recent.cycle.inspection %>% 
+  group_by(dba, cuisine = cuisine_description) %>% 
+  summarise(locations = n(),
+            avg_score = round(mean(score),2),
+            median_score = round(median(score),2)) %>%
+  ungroup() %>% 
+  arrange(desc(locations)) 
+
+
+by.dba %>% 
+    mutate(location_bin = cut(locations, c(0,1,3,10,Inf),
+                              labels = c("1", "2-3","3-10", ">10" ))) %>% 
+    ggplot(aes(
+    x = location_bin,
+    y = avg_score + 1
+  ))+
+  geom_boxplot()+
+  scale_y_log10()+
+  coord_flip()
+```
+
+```{r}
+inspection %>% 
+  count(critical_flag, violation_code, violation_description, sort = TRUE)
+```
+
+```{r}
+violation.cuisine.count <- inspection %>% 
+  semi_join(most.recent.cycle.inspection, by = c("camis", "inspection_date")) %>% 
+  count(flag = critical_flag,  code =violation_code, descrip =violation_description, cuisine = cuisine_description) %>% 
+  group_by(code) %>% 
+  mutate(total_vio = sum(n)) %>% 
+  group_by(cuisine) %>% 
+  mutate(total_cuisine = sum(n)) %>% 
+  ungroup() %>% 
+  filter(total_vio  >= 1000,
+         total_cuisine >= 1000) %>%
+  group_by(descrip) %>% 
+  mutate(fraction = n / total_cuisine,
+         avg_fraction = mean(fraction)) %>% 
+  ungroup()
+```
+
+
+```{r}
+violation.cuisine.count %>% 
+  mutate(relative_risk = fraction / avg_fraction) %>% 
+  arrange(desc(relative_risk)) %>% 
+  view()
+```
+
+```{r}
+violation.cuisine.count %>% 
+  mutate(relative_risk = fraction / avg_fraction) %>% 
+  arrange(desc(relative_risk)) %>% 
+  filter(str_detect(descrip , "mice")) %>% 
+  view()
+
+```
+
+
+## what violations tend to accur together?
+
+```{r}
+violations <- inspection %>% 
+  semi_join(most.recent.cycle.inspection, by = c("camis", "inspection_date")) %>% 
+  filter(!is.na(violation_description))
+```
+
+```{r}
+library(widyr)
+violations %>%
+  pairwise_cor(violation_description, camis, sort = TRUE) 
+```
+
+```{r}
+principal_components <- violations %>% 
+  mutate(value = 1) %>% 
+  widely_svd(violation_description, camis, value = value, nv = 6) 
+```
+
+```{r}
+principal_components %>% 
+  filter(dimension == 1) %>% 
+  top_n(10, abs(value)) %>% 
+  arrange(desc(value)) %>% 
+  mutate(violation_description = str_sub(violation_description, 1, 60),
+         violation_description = fct_reorder(violation_description, value)) %>% 
+  ggplot(aes(
+    x = violation_description,
+    y = value
+  ))+
+  geom_col()+
+  coord_flip()
+```
+```{r}
+principal_components %>% 
+  filter(dimension == 2) %>% 
+  top_n(10, abs(value)) %>% 
+  arrange(desc(value)) %>% 
+  mutate(violation_description = str_sub(violation_description, 1, 60),
+         violation_description = fct_reorder(violation_description, value)) %>% 
+  ggplot(aes(
+    x = violation_description,
+    y = value
+  ))+
+  geom_col()+
+  coord_flip()
+```
+
+```{r}
+principal_components %>% 
+  filter(dimension == 3) %>% 
+  top_n(10, abs(value)) %>% 
+  arrange(desc(value)) %>% 
+  mutate(violation_description = str_sub(violation_description, 1, 60),
+         violation_description = fct_reorder(violation_description, value)) %>% 
+  ggplot(aes(
+    x = violation_description,
+    y = value
+  ))+
+  geom_col()+
+  coord_flip()
+```
