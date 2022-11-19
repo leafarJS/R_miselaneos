@@ -1,0 +1,279 @@
+---
+title: "10_exercice"
+author: "jorge_callejo"
+date: "2022-11-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(scales)
+library(lubridate)
+theme_set(theme_minimal())
+
+```
+
+```{r}
+cetaceos <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2018/2018-12-18/allCetaceanData.csv")
+
+data <- cetaceos %>% select(-...1) %>% 
+  mutate(birthYear = as.integer(birthYear),
+         age = if_else(status == "Died", year(statusDate)- birthYear, NA_real_))
+
+```
+
+
+
+```{r}
+data %>% 
+  count(acquisition, sort = TRUE)
+```
+```{r}
+data%>%
+  count(status, sort = TRUE)
+  
+```
+
+```{r}
+data %>% 
+  filter(status == "Died") %>% 
+  select(birthYear, statusDate) %>% 
+  filter(!is.na(birthYear), !is.na(statusDate)) %>% 
+  mutate(age = year(statusDate)- birthYear) %>% 
+  ggplot(aes(
+    x = age
+  ))+
+  geom_histogram(bins = 30)
+
+  
+```
+```{r}
+data %>% 
+  count(species  = fct_lump(species, 8), sort = TRUE) %>% 
+  mutate(species = fct_reorder(species, n)) %>% 
+  ggplot(aes(
+    x  = species,
+    y  = n
+  ))+
+  geom_col()+
+  coord_flip()
+```
+```{r}
+data %>% 
+  mutate(species = fct_lump(species, 6)) %>%            filter(!is.na(birthYear), !is.na(statusDate)) %>% 
+  mutate(age = year(statusDate) - birthYear) %>% 
+  ggplot(aes(
+    species, 
+    age
+  ))+
+  geom_boxplot()+
+  coord_flip()
+```
+```{r}
+data%>%
+  count(acquisition, originLocation, sort = TRUE) %>% 
+  filter(originLocation !=  "Unknown")
+```
+
+```{r}
+data %>% 
+  ggplot(aes(
+    originDate,
+    fill = acquisition
+  ))+
+  geom_histogram(bins = 30)
+```
+
+```{r}
+data %>% 
+  filter(originDate >= "1960-01-01") %>% 
+  count(acquisition,
+        decade = 5 * (year(originDate) %% 5) ) %>% 
+  complete(acquisition, decade, fill = list(n = 0)) %>%   mutate(acquisition = fct_reorder(acquisition, n, sum)) %>% 
+  group_by(decade) %>% 
+  mutate(pecent = n /sum(n)) %>% 
+  ggplot(aes(
+    decade,
+    pecent,
+    fill = acquisition
+  ))+
+  geom_area()+
+  scale_y_continuous(labels = percent_format())+
+  theme(legend.position = "bottom")+
+  labs(x = "year", y = "% cetaceos")
+
+```
+
+```{r}
+library(fuzzyjoin)
+regexes <- tribble(
+  ~regex, ~category,
+  "Unknown", "Unknown",
+  "Gulf of Mexico|MS", "Mexico",
+  "Floridad|FL", "Floridad",
+  "Texax|TX", "Texas",
+  "SeaWorld", "SeaWorld",
+  "Pacific", "Pacific Ocean",
+  "Atlantic", "Atlantic Ocean"
+)
+cetaceos_anotados <- data %>% 
+mutate(unique_id = row_number()) %>%
+regex_left_join(regexes, c(originLocation = "regex")) %>% 
+  distinct(unique_id, .keep_all = TRUE) %>% 
+  mutate(category = coalesce(category, originLocation),
+         category = fct_lump(category, 9)) %>% 
+  view()
+```
+
+```{r}
+cetaceos_anotados %>% 
+  count(category,
+        decade = 5 * (year(originDate) %% 5) ) %>% 
+  complete(category, decade, fill = list(n = 0)) %>%   mutate(category = fct_reorder(category, n, sum)) %>% 
+  group_by(decade) %>% 
+  mutate(pecent = n /sum(n)) %>% 
+  ggplot(aes(
+    decade,
+    pecent,
+    fill = category
+  ))+
+  geom_area()+
+  scale_y_continuous(labels = percent_format())+
+  theme(legend.position = "bottom")+
+  labs(x = "year", y = "% cetaceos")
+```
+
+
+
+```{r}
+cetaceos_anotados %>% 
+  filter(acquisition == "Capture") %>% 
+  count(category,
+        decade = 5 * (year(originDate) %% 5) ) %>% 
+  complete(category, decade, fill = list(n = 0)) %>%   mutate(category = fct_reorder(category, n, sum)) %>% 
+  group_by(decade) %>% 
+  mutate(pecent = n /sum(n)) %>% 
+  ggplot(aes(
+    decade,
+    pecent,
+    fill = category
+  ))+
+  geom_area()+
+  scale_y_continuous(labels = percent_format())+
+  theme(legend.position = "bottom")+
+  labs(x = "year", y = "% cetaceos")
+```
+
+```{r}
+cetaceos_anotados %>% 
+  filter(acquisition == "Born") %>% 
+  count(category,
+        decade = 5 * (year(originDate) %% 5) ) %>% 
+  complete(category, decade, fill = list(n = 0)) %>%   mutate(category = fct_reorder(category, n, sum)) %>% 
+  group_by(decade) %>% 
+  mutate(pecent = n /sum(n)) %>% 
+  ggplot(aes(
+    decade,
+    pecent,
+    fill = category
+  ))+
+  geom_area()+
+  scale_y_continuous(labels = percent_format())+
+  theme(legend.position = "bottom")+
+  labs(x = "year", y = "% cetaceos")
+```
+
+
+```{r}
+library(survival)
+library(broom)
+
+delfines_vivos <- data %>% 
+  filter(status %in% c("Alive", "Died")) %>% 
+  mutate(deathYear = ifelse(status == "Alive", 2017, year(statusDate)),
+         status = ifelse(status == "Alive", 0,1),
+         age = deathYear -birthYear) %>% 
+  filter(!is.na(deathYear)) %>% 
+  select(birthYear, deathYear, status, sex,age,  acquisition, species) %>% 
+  filter(deathYear  >= birthYear)
+
+model <-survfit(Surv(age, status)~1, delfines_vivos)
+
+
+tidy(model)
+
+tidy(model) %>% 
+  ggplot(aes(
+    time,
+    estimate
+  ))+
+  geom_line()+
+  geom_ribbon(aes(
+    ymin = conf.low,
+    ymax = conf.high
+  ), alpha = .2)
+
+
+```
+
+```{r}
+model1 <-survfit(Surv(age, status)~ sex, delfines_vivos)
+
+tidy(model1) %>% 
+  filter(strata != "sex=U") %>% 
+  ggplot(aes(
+    time,
+    estimate,
+    color = strata
+  ))+
+  geom_line()+
+  geom_ribbon(aes(
+    ymin = conf.low,
+    ymax = conf.high
+  ), alpha = .2)+
+  scale_y_continuous(labels = percent_format())+
+  facet_wrap(~strata)+
+  labs(y = "Estimación de % de supervivencia en cautiverio")
+```
+
+```{r}
+coxph(Surv(age, status)~sex, delfines_vivos) %>% 
+  tidy()
+```
+
+```{r}
+tidy(model1) %>% 
+  ggplot(aes(
+    time,
+    estimate,
+    color = strata
+  ))+
+  geom_line()+
+  geom_ribbon(aes(
+    ymin = conf.low,
+    ymax = conf.high
+  ), alpha = .2)+
+  scale_y_continuous(labels = percent_format())+
+  labs(y = "Estimación de % de supervivencia en cautiverio")
+```
+```{r}
+model2 <-survfit(Surv(age, status)~ acquisition, delfines_vivos)
+
+tidy(model2) %>% 
+  ggplot(aes(
+    time,
+    estimate,
+    color = strata
+  ))+
+  geom_line()+
+  geom_ribbon(aes(
+    ymin = conf.low,
+    ymax = conf.high
+  ), alpha = .2)+
+  scale_y_continuous(labels = percent_format())+
+  facet_wrap(~strata)+
+  labs(y = "Estimación de % de supervivencia en cautiverio")+
+  theme(legend.position = "bottom")
+```
+
