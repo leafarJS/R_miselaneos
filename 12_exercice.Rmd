@@ -1,0 +1,248 @@
+---
+title: "12_exercice"
+author: "jorge_callejo"
+date: "2022-11-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(countrycode)
+theme_set(theme_minimal())
+```
+
+```{r}
+agencies <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-01-15/agencies.csv") 
+launch <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-01-15/launches.csv")
+
+```
+
+```{r}
+dim(agencies)
+dim(launch)
+```
+
+```{r}
+launch %>% 
+  count(launch_year, agency_type) %>% 
+  ggplot(aes(
+    launch_year,
+    n,
+    color = agency_type
+  ))+
+  geom_line()+
+  labs(x = "Time",
+       y = "# of launches this year",
+       color = "agency type")+
+  theme(legend.position = "bottom")
+```
+```{r}
+launch %>% 
+  count(agency_type, agency, sort = TRUE)
+```
+
+```{r}
+agencies %>% 
+  count(state_code, wt = count, sort = TRUE)
+```
+
+```{r}
+launch %>% 
+mutate(state_code_cleaned = fct_collapse(
+  state_code,
+  "RU" = c("SU", "RU"),
+  "FR" = "F",
+  "JP" = "J",
+  "IT" = "I"
+)) %>% 
+  mutate(state_name = countrycode(state_code_cleaned, "iso2c", "country.name"),
+         state_name = fct_lump(state_name, 6)) %>% 
+  replace_na(list(state_name = "Other")) %>% 
+  count(state_name, sort = TRUE) %>% 
+  view()
+```
+
+```{r}
+launches_processed <-launch %>% 
+  filter(launch_date <= Sys.Date()) %>% 
+mutate(state_code_cleaned = fct_collapse(
+  state_code,
+  "RU" = c("SU", "RU"),
+  "FR" = "F",
+  "JP" = "J",
+  "IT" = "I"
+)) %>% 
+  mutate(state_name = countrycode(state_code_cleaned, "iso2c", "country.name"),
+         state_name = fct_lump(state_name, 6)) %>% 
+  replace_na(list(state_name = "Other"))
+```
+
+
+```{r}
+launches_processed %>% 
+  filter(launch_date <= Sys.Date()) %>% 
+  count(launch_year, state_name) %>% 
+  mutate(state_name = fct_reorder(state_name, -n, sum)) %>% 
+  ggplot(aes(
+    launch_year,
+    n, 
+    color = state_name
+  ))+
+  geom_line()+
+  labs(x = "Time", 
+       y = " Launch per year",
+       color = "State",
+       title = "Launches per year per country",
+       subtitle = "combines Soviet Unión with Russia")+
+  theme(legend.position = "bottom")
+```
+```{r}
+privite_starup_launches <- launches_processed %>% 
+  filter(agency_type %in% c("private", "startup")) %>% 
+  inner_join(agencies %>% 
+               select(agency, agency_name = name, short_name, parent), by = "agency") %>% 
+  mutate(agency_name_lumped = fct_lump(agency_name, 6),
+         agency_name_lumped  = if_else(agency_name_lumped == "Other" & state_name == "United States", "Other US", as.character(agency_name_lumped))) 
+```
+
+```{r}
+privite_starup_launches %>% 
+  filter(launch_date <= Sys.Date()) %>% 
+  count(agency_name_lumped, sort = TRUE) %>%
+  mutate(agency_name_lumped = fct_reorder(agency_name_lumped, n)) %>% 
+  ggplot(aes(
+    agency_name_lumped,
+    n, 
+    fill = agency_name_lumped
+  ))+
+  geom_col(show.legend = FALSE)+
+  coord_flip()+
+  labs(x = "",
+       y = "# of launches overall")
+```
+```{r}
+privite_starup_launches %>% 
+  count(agency_name_lumped, state_name, sort = TRUE) %>%
+  mutate(agency_name_lumped = fct_reorder(agency_name_lumped, n, sum)) %>% 
+  ggplot(aes(
+    agency_name_lumped,
+    n, 
+    fill = state_name
+  ))+
+  geom_col()+
+  coord_flip()+
+  labs(x = "",
+       y = "# of launches overall", 
+       fill = "Country",
+       title = "What private/starup agencies have had the most launches?")+
+  theme(legend.position = "bottom")
+```
+```{r}
+privite_starup_launches %>% 
+  count(agency_name_lumped,
+        launch_year) %>%
+  complete(agency_name_lumped, launch_year, fill = list(n = 0)) %>% 
+  mutate(agency_name_lumped = fct_reorder(agency_name_lumped, -n, sum)) %>% 
+  ggplot(aes(
+    launch_year,
+    n,
+    color = agency_name_lumped
+  ))+
+  geom_line()+
+  facet_wrap(~ agency_name_lumped)+
+  theme(legend.position = "none")+
+  labs(x = "Title",
+       y = "# of launches in 5 year period")
+  
+
+```
+
+```{r}
+launch %>% 
+  count(type, sort = TRUE)
+```
+
+```{r}
+vehicles <- launches_processed %>% 
+  group_by(type, state_name) %>% 
+  summarize(first_launch = min(launch_year),
+            last_launch = max(launch_year),
+            launch = n()) %>% 
+  ungroup() 
+
+```
+```{r}
+russian_vehicle <- vehicles %>% 
+  filter(state_name == "Russia") %>% 
+  arrange(desc(launch)) %>% 
+  filter(launch >= 30) 
+```
+
+```{r}
+launches_processed %>% 
+  semi_join(russian_vehicle, by = "type") %>%
+  mutate(type = fct_reorder(type, launch_date, min)) %>% 
+  ggplot(aes(
+    launch_date,
+    type,
+    color = "red"
+  ))+
+  geom_point(show.legend = FALSE)
+```
+
+```{r}
+launches_processed %>% 
+  semi_join(russian_vehicle, by = "type") %>%
+  mutate(type = fct_reorder(type, launch_date, min)) %>% 
+  ggplot(aes(
+    type,
+    launch_date
+  ))+
+  geom_boxplot()+
+  coord_flip()  
+```
+```{r}
+launches_processed %>% 
+  semi_join(russian_vehicle, by = "type") %>%
+  mutate(type = fct_reorder(type, launch_date, min)) %>% 
+  ggplot(aes(
+    launch_date,
+    type,
+    color = type
+  ))+
+  geom_jitter(alpha = .25, width = 0, height = .2)+
+  theme(legend.position = "none")
+```
+
+```{r}
+launches_processed %>% 
+  semi_join(russian_vehicle, by = "type") %>%
+  mutate(type = fct_reorder(type, launch_date, min)) %>% 
+  ggplot(aes(
+    launch_date,
+    type
+  ))+
+  geom_jitter(alpha = .25, width = 0, height = .2, color = "blue")+
+  theme(legend.position = "none")
+```
+
+
+```{r}
+launches_processed %>% 
+  filter(state_code == "US") %>% 
+  add_count(type) %>% 
+  filter(n >= 20) %>% 
+  mutate(type = fct_reorder(type, launch_date, min)) %>% 
+  ggplot(aes(
+    launch_date,
+    type,
+    color = agency_type
+  ))+
+  geom_jitter(alpha = .25, width = 0, height = .2)+
+  theme(legend.position = "bottom")
+
+```
+
