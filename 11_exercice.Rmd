@@ -9,6 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lubridate)
+library(scales)
 theme_set(theme_minimal())
 ```
 
@@ -301,6 +302,23 @@ library(broom)
 glm(!is.na(season2)~ season1, data = first.three.seasons) %>% 
   summary()
   
+```
+```{r}
+first.three.seasons %>% 
+  group_by(season1_bin = cut(season1, c(0,7,7.5,8,8.5,10)),
+           time_bin = ifelse(date.first.season < "2000-01-01", "Before 2000", "After 2000")) %>% 
+  summarise(had.second.season = mean(!is.na(season2)),
+            observations = n()) %>% 
+  ggplot(aes(
+    season1_bin,
+    had.second.season,
+    color = time_bin,
+    group = time_bin
+  ))+
+  geom_line()+
+  geom_point()+
+  scale_y_continuous(labels = scales::percent_format())+
+  theme(legend.position = "bottom")
 ```
 
 
