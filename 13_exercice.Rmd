@@ -1,0 +1,258 @@
+---
+title: "13_exercice"
+author: "jorge_callejo"
+date: "2022-11-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(countrycode)
+library(ggplot2)
+theme_set(theme_minimal())
+```
+
+```{r}
+prision_summary <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-01-22/prison_summary.csv") 
+
+prision_population <-read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-01-22/prison_population.csv")
+```
+
+```{r}
+prision_summary %>% 
+  count(pop_category)
+```
+
+```{r}
+prision_summary %>% 
+  filter(pop_category %in% c("White", "Black", "Latino", "Asian", "Native American")) %>% 
+  ggplot(aes(
+    year,
+    rate_per_100000,
+    color = urbanicity
+  ))+
+  geom_line()+
+  facet_wrap(~pop_category)+
+  theme(legend.position = "bottom")
+```
+```{r}
+prision_population %>% 
+  count(region, sort = TRUE)
+```
+```{r}
+prision_population_2015 <- prision_population %>%  filter(year == 2015)
+```
+
+```{r}
+non_missing_state <- prision_population_2015 %>% 
+  group_by(state) %>% 
+  filter(!is.na(population)) %>% 
+  ungroup()
+
+non_missing_state %>% 
+  group_by(state) %>% 
+  summarise(total_pop_missing_prision = sum(population[is.na(prison_population)])/sum(population)) %>% 
+  arrange(desc(total_pop_missing_prision))
+```
+
+```{r}
+non_missing_state %>% 
+  group_by(popultaion_category = cut(population, c(-1,100,1000,10000,Inf))) %>% 
+  summarise(pct_missing = mean(is.na(prision_population)),
+            observations = n())
+```
+```{r}
+by_state <-non_missing_state %>% 
+  filter(!is.na(prison_population),
+         pop_category == "Total") %>% 
+  group_by(state) %>% 
+  summarise_at(vars(population, prison_population), sum) %>% 
+  mutate(rate = prison_population/population) %>% 
+  arrange(desc(rate))
+
+```
+
+```{r}
+#install.packages("ggthemes")
+library(ggthemes)
+
+by_state %>% 
+  mutate(region = str_to_lower(state.name[match(state, state.abb)])) %>% 
+  inner_join(map_data("state"), by = "region") %>% 
+  ggplot(aes(
+    long, 
+    lat, 
+    group = group,
+    fill = rate
+  ))+
+  geom_polygon()+
+  theme_map()+
+  coord_map()
+```
+```{r}
+by_state %>% 
+  mutate(region = str_to_lower(state.name[match(state, state.abb)])) %>% 
+ right_join(map_data("state"), by = "region") %>% 
+  ggplot(aes(
+    long, 
+    lat, 
+    group = group,
+    fill = rate
+  ))+
+  geom_polygon()+
+  theme_map()+
+  coord_map()
+```
+```{r}
+county_overall_2015 <- prision_population_2015 %>% 
+  filter(pop_category == "Total") %>% 
+  mutate(region = str_to_lower(state.name[match(state, state.abb)]),
+         subregion = str_remove(str_to_lower(county_name), " county| parish| city"),
+         rate = prison_population/population)
+
+
+county_overall_2015 %>% 
+  right_join(map_data("county"), by = c("region", "subregion")) %>% 
+  ggplot(aes(
+    long,
+    lat, 
+    group = group,
+    fill = rate
+  ))+
+  geom_polygon()+
+  theme_map()+
+  coord_map()
+  
+```
+```{r}
+county_overall_2015%>% 
+  right_join(map_data("county"), by = c("region", "subregion")) %>% 
+  filter(rate < .5) %>% 
+  ggplot(aes(
+    long,
+    lat, 
+    group = group,
+    fill = rate
+  ))+
+  geom_polygon()+
+  theme_map()+
+  coord_map()+
+  scale_fill_gradient2(low = "blue",
+                       high = "red",
+                       midpoint = .01,
+                       labels = scales::percent_format())
+  
+```
+```{r}
+county_overall_2015%>% 
+  right_join(map_data("county"), by = c("region", "subregion")) %>% 
+  filter(rate < .5) %>% 
+  ggplot(aes(
+    long,
+    lat, 
+    group = group,
+    fill = rate
+  ))+
+  geom_polygon()+
+  theme_map()+
+  coord_map()+
+  scale_fill_gradient2(low = "blue",
+                       high = "red",
+                       midpoint = .01,
+                       labels = scales::percent_format())
+```
+
+```{r}
+county_overall <- prision_population %>% 
+  filter(pop_category == "Total") %>% 
+  mutate(region = str_to_lower(state.name[match(state, state.abb)]),
+         subregion = str_remove(str_to_lower(county_name), " county| parish| city"),
+         rate = prison_population/population) %>% 
+  filter(!is.na(rate),
+         county_name != "McPherson County") %>% 
+  right_join(map_data("county"), by = c("region", "subregion"))  
+
+county_overall%>% 
+  filter(rate < .5) %>% 
+  ggplot(aes(
+    long,
+    lat, 
+    group = group,
+    fill = rate
+  ))+
+  geom_polygon()+
+  theme_map()+
+  coord_map()+
+  scale_fill_gradient2(low = "blue",
+                       high = "red",
+                       midpoint = .1,
+                       labels = scales::percent_format())
+```
+
+
+
+```{r}
+#install.packages("gganimate")
+library(gganimate)
+county_overall %>% 
+  ggplot(aes(
+    long,
+    lat,
+    group = group,
+    fill  = rate
+  ))+
+  geom_polygon()+
+  theme_map()+
+  coord_map()+
+  transition_manual(year)+ 
+  scale_fill_gradient2(low = "blue",
+                       high = "red",
+                       midpoint = .1,
+                       labels = scales::percent_format(),
+                       limits = c(0,.034))
+  
+```
+
+```{r}
+county_overall %>% 
+  filter(region == "texas") %>% 
+  ggplot(aes(
+    long,
+    lat,
+    group = group,
+    fill  = rate
+  ))+
+  geom_polygon()+
+  theme_map()+
+  coord_map()+
+  transition_manual(year)+ 
+  scale_fill_gradient2(low = "blue",
+                       high = "red",
+                       midpoint = .1,
+                       labels = scales::percent_format(),
+                       limits = c(0,.034))
+```
+
+```{r}
+by_state_year <- prision_population %>% 
+  filter(!is.na(population), !is.na(prison_population),
+         pop_category == "Total") %>% 
+  group_by(year, state) %>% 
+  summarise_at(vars(population, prison_population), sum) %>%
+  ungroup() %>% 
+  mutate(rate = prison_population / population)
+```
+
+```{r}
+by_state_year %>% 
+  filter(state == "TX") %>% 
+  ggplot(aes(
+    year, 
+    population
+  ))+
+  geom_line()+
+  expand_limits(y = 0)
+```
