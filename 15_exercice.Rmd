@@ -1,0 +1,367 @@
+---
+title: "15_exercice"
+author: "jorge_callejo"
+date: "2022-11-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE}
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(countrycode)
+library(ggplot2)
+theme_set(theme_minimal())
+```
+
+```{r}
+full_trains <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-02-26/full_trains.csv") %>% mutate(pct_late_at_departure = num_late_at_departure/ total_num_trips,
+         arrival_station = str_to_title(arrival_station),
+         departure_station = str_to_title(departure_station),
+         month = as.Date(sprintf("%d-%02d-01", year, month))) %>% 
+  arrange(departure_station, arrival_station, month) %>% 
+  fill(service)
+```
+
+```{r}
+small_trains <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-02-26/small_trains.csv")
+```
+ 
+```{r}
+full_trains %>% 
+  count(year, month) %>% 
+  view()
+```
+
+```{r}
+full_trains %>% 
+  filter(!is.na(service)) %>% 
+  group_by(service) %>% 
+  count(service) %>% 
+  ggplot(aes(
+    service,
+    n,
+    fill = service
+  ))+
+  geom_col(show.legend = FALSE)+
+  coord_flip()
+  
+```
+```{r}
+full_trains %>% 
+  group_by(year) %>% 
+  summarise(total_trips_year = sum(total_num_trips)) %>% 
+  ggplot(aes(
+    year,
+    total_trips_year
+
+  ))+
+  geom_col(aes(fill  = year), show.legend = FALSE)+
+  scale_y_continuous(labels = scales::comma_format())
+  
+```
+
+```{r}
+full_trains %>% 
+  filter(!is.na(num_of_canceled_trains)) %>% 
+  group_by(year) %>% 
+  summarise(total_canceled_per_year = sum(num_of_canceled_trains )) %>% 
+  ggplot(aes(
+    year,
+    total_canceled_per_year
+  ))+
+  geom_line()+
+  geom_point()+
+  expand_limits(y = 0)
+  
+```
+```{r}
+november_2018 <- full_trains %>% 
+  filter(year == 2018, month == 11) %>% 
+  mutate(pct_late_at_departure = num_late_at_departure/ total_num_trips,
+         arrival_station = str_to_title(arrival_station),
+         departure_station = str_to_title(departure_station))
+
+november_2018 %>% 
+  ggplot(aes(
+    pct_late_at_departure
+  ))+
+  geom_histogram(binwidth = .05)+
+  scale_x_continuous(labels = percent_format())
+```
+```{r}
+november_2018 %>% 
+  mutate(departure_station = fct_lump(departure_station, 3)) %>% 
+  ggplot(aes(
+    departure_station,
+    pct_late_at_departure
+  ))+
+  geom_boxplot()+
+  scale_y_continuous(labels = scales::percent_format())+
+  coord_flip()
+```
+
+```{r}
+november_2018 %>% 
+  mutate(arrival_station = fct_infreq(fct_lump(arrival_station, prop = .01))) %>% 
+  mutate(departure_station = fct_infreq(fct_lump(departure_station, prop = .01))) %>% 
+  ggplot(aes(
+    arrival_station,
+    departure_station,
+    fill = pct_late_at_departure
+  ))+
+  geom_tile()+
+  scale_fill_gradient2(low = "blue", 
+                       high = "red",
+                       midpoint = .25,
+                       labels = percent_format())+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs(x = "Arrival station",
+       y = "Departure station",
+       fill = "% late at departure",
+       title = "Which routes have the most delayed trains?",
+       subtitle = "Station with only one arrival/departing route were trains")+
+  theme(legend.position = "bottom")
+
+```
+
+
+```{r}
+november_2018 %>% 
+  mutate(arrival_station = fct_infreq(fct_lump(arrival_station, prop = .01))) %>% 
+  mutate(departure_station = fct_infreq(fct_lump(departure_station, prop = .01))) %>% 
+  group_by(arrival_station, departure_station) %>% 
+  summarise(pct_late_at_departure = sum(num_late_at_departure) / sum(total_num_trips)) %>% 
+  ggplot(aes(
+    arrival_station,
+    departure_station,
+    fill = pct_late_at_departure
+  ))+
+  geom_tile()+
+  scale_fill_gradient2(low = "blue", 
+                       high = "red",
+                       midpoint = .25,
+                       labels = percent_format())+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs(x = "Arrival station",
+       y = "Departure station",
+       fill = "% late at departure",
+       title = "Which routes have the most delayed trains?",
+       subtitle = "Station with only one arrival/departing route were trains")+
+  theme(legend.position = "bottom")
+```
+```{r}
+november_2018 %>% 
+  mutate(arrival_station = fct_reorder(fct_lump(arrival_station, prop = .01), pct_late_at_departure)) %>% 
+  mutate(departure_station = fct_reorder(fct_lump(departure_station, prop = .01), pct_late_at_departure)) %>% 
+  group_by(arrival_station, departure_station) %>% 
+  summarise(pct_late_at_departure = sum(num_late_at_departure) / sum(total_num_trips)) %>% 
+  ggplot(aes(
+    arrival_station,
+    departure_station,
+    fill = pct_late_at_departure
+  ))+
+  geom_tile()+
+  scale_fill_gradient2(low = "blue", 
+                       high = "red",
+                       midpoint = .25,
+                       labels = percent_format())+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs(x = "Arrival station",
+       y = "Departure station",
+       fill = "% late at departure",
+       title = "Which routes have the most delayed trains in november 2018",
+       subtitle = "Station with only one arrival/departing route were lumped into other")+
+  theme(legend.position = "bottom")
+```
+
+```{r}
+full_trains %>% 
+  filter(departure_station == "Lyon Part Dieu",
+         arrival_station == "Rennes") %>% 
+  ggplot(aes(
+    month,
+    pct_late_at_departure
+  ))+
+  geom_line()+
+  scale_y_continuous(labels = percent_format())+
+  expand_limits(y = 0)
+
+```
+
+```{r}
+full_trains %>% 
+  filter(departure_station == "Lyon Part Dieu") %>% 
+  ggplot(aes(
+    month,
+    pct_late_at_departure,
+    color = arrival_station
+  ))+
+  geom_line()+
+  scale_y_continuous(labels = percent_format())+
+  expand_limits(y = 0)
+```
+
+```{r}
+full_trains %>% 
+  filter(departure_station == "Lyon Part Dieu") %>% 
+  ggplot(aes(
+    month,
+    pct_late_at_departure,
+    color = arrival_station
+  ))+
+  geom_line()+
+  scale_y_continuous(labels = percent_format())+
+  expand_limits(y = 0)+
+  facet_wrap(~arrival_station)+
+  theme(legend.position = "none")
+  
+```
+
+```{r}
+full_trains %>% 
+group_by(departure_station = fct_lump(departure_station, prop = 0.02), month) %>% 
+  summarise_at(vars(contains("num")),sum) %>% 
+  mutate(pct_late_at_departure = num_late_at_departure/total_num_trips) %>% 
+  ggplot(aes(
+    month, 
+    pct_late_at_departure,
+    color = departure_station
+  ))+
+  geom_line()
+```
+
+```{r}
+full_trains %>% 
+group_by(departure_station = fct_lump(departure_station, prop = 0.02), month) %>% 
+  summarise_at(vars(contains("num")),sum) %>% 
+  ungroup() %>% 
+  mutate(pct_late_at_departure = num_late_at_departure / total_num_trips) %>% 
+  mutate(departure_station = fct_reorder(departure_station, -pct_late_at_departure, last)) %>% 
+  ggplot(aes(
+    month, 
+    pct_late_at_departure,
+    color = departure_station
+  ))+
+  geom_line()+
+  labs(x = "Month",
+       y = "% late at departure",
+       color = "Departure Station")
+```
+
+```{r}
+by_departure_station_month_int <- full_trains %>% 
+  filter(service == "International") %>% 
+group_by(departure_station, month) %>% 
+  summarise_at(vars(contains("num")),sum) %>% 
+  ungroup() %>% 
+  mutate(pct_late_at_departure = num_late_at_departure / total_num_trips)
+```
+
+```{r}
+by_departure_station_month_nal <- full_trains %>% 
+  filter(service == "National") %>% 
+group_by(departure_station, month) %>% 
+  summarise_at(vars(contains("num")),sum) %>% 
+  ungroup() %>% 
+  mutate(pct_late_at_departure = num_late_at_departure / total_num_trips)
+```
+
+
+```{r}
+by_departure_station_month <- full_trains %>%
+group_by(departure_station, month, service) %>% 
+  summarise_at(vars(contains("num")),sum) %>% 
+  ungroup() %>% 
+  mutate(pct_late_at_departure = num_late_at_departure / total_num_trips) 
+```
+
+
+
+```{r}
+by_departure_station_month_int %>% 
+  mutate(departure_station = fct_reorder(departure_station, pct_late_at_departure)) %>% 
+  ggplot(aes(
+    month, 
+    departure_station,
+    fill = pct_late_at_departure
+  ))+
+  geom_tile()+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = .25, 
+                       labels = percent_format())+
+  labs(fill = "% late at departure")
+  
+```
+
+```{r}
+by_departure_station_month_nal %>% 
+  mutate(departure_station = fct_reorder(departure_station, pct_late_at_departure)) %>% 
+  ggplot(aes(
+    month, 
+    departure_station,
+    fill = pct_late_at_departure
+  ))+
+  geom_tile()+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = .25, 
+                       labels = percent_format())+
+  labs(fill = "% late at departure")
+
+```
+
+```{r}
+by_departure_station_month %>%
+  filter(!is.na(service)) %>% 
+  mutate(departure_station = fct_reorder(departure_station, pct_late_at_departure)) %>% 
+  ggplot(aes(
+    month, 
+    departure_station,
+    fill = pct_late_at_departure
+  ))+
+  geom_tile()+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint =.25, 
+                       labels = percent_format())+
+  labs(fill = "% late at departure")+
+  facet_wrap(~ service, ncol = 1, scales = "free")
+```
+
+```{r}
+by_departure_station_month %>%
+  filter(!is.na(service)) %>% 
+  group_by(departure_station = paste0(departure_station, " - ", service), month) %>% 
+  mutate(departure_station = fct_reorder(departure_station, pct_late_at_departure)) %>% 
+  ggplot(aes(
+    month, 
+    departure_station,
+    fill = pct_late_at_departure
+  ))+
+  geom_tile()+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = 0.25, 
+                       labels = percent_format())+
+  labs(fill = "% late at departure")
+```
+
+```{r}
+by_departure_station_month %>%
+  filter(!is.na(service)) %>% 
+  group_by(departure_station = ifelse(service == "International", paste0(departure_station, " (International) "), departure_station), service, month) %>% 
+  mutate(departure_station = fct_reorder(departure_station, (service != "International") + pct_late_at_departure, mean)) %>% 
+  ggplot(aes(
+    month, 
+    departure_station,
+    fill = pct_late_at_departure
+  ))+
+  geom_tile()+
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = .25, 
+                       labels = percent_format())+
+  labs(fill = "% late at departure")
+
+```
+
+
+
+
+
