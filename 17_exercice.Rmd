@@ -1,0 +1,271 @@
+---
+title: "17_exercice"
+author: "jorge_callejo"
+date: "2022-11-30"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, echo=FALSE}
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(countrycode)
+library(ggplot2)
+library(plotly)
+theme_set(theme_minimal())
+```
+
+
+```{r}
+board_games <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-03-12/board_games.csv")
+```
+
+## analisis exploratorio de datos EDA
+
+```{r}
+board_games %>% 
+  count(publisher, sort =TRUE)
+```
+```{r}
+board_games %>% 
+  count(year_published) %>% 
+  arrange(desc(year_published))
+```
+```{r}
+board_games %>% 
+  count(year_published) %>% 
+  arrange(desc(year_published)) %>% 
+  ggplot(aes(
+    year_published,
+    n
+  ))+
+  geom_line()
+
+```
+```{r}
+board_games %>% 
+  ggplot(aes(
+    average_rating
+  ))+
+  geom_histogram(binwidth = 0.2)
+```
+```{r}
+board_games %>% 
+  filter(users_rated >= 500) %>% 
+  ggplot(aes(
+    average_rating
+  ))+
+  geom_histogram()
+```
+```{r}
+board_games %>% 
+  ggplot(aes(
+    max_playtime /60
+  ))+
+  geom_histogram(binwidth = 0.3)+
+  scale_x_log10(breaks = round(2 ^ seq(-2,4),1))
+```
+```{r}
+board_games %>% 
+  filter(max_players > 5, max_playtime < 1000) %>% 
+  ggplot(aes(
+    max_playtime/60
+  ))+
+  geom_histogram(binwidth = 0.25)+
+  scale_x_log10(breaks = round(2 ^ seq(-2,4),1))
+```
+## categorical variables
+
+```{r}
+categorical_variables <- board_games %>% 
+  select(game_id, name, family, expansion, category, artist, designer) %>% 
+  gather(type, value, -game_id, -name) %>% 
+  filter(!is.na(value)) %>% 
+  separate_rows(value, sep = ",") %>% 
+  arrange(game_id) 
+```
+
+```{r}
+categorical_counts <-categorical_variables %>% 
+  count(type, value, sort = TRUE)
+```
+
+```{r}
+categorical_counts %>% 
+  filter(type == "category") %>% 
+  head(20) %>% 
+  mutate(value = fct_reorder(value, n)) %>% 
+  ggplot(aes(
+    value,
+    n
+  ))+
+  geom_col()+
+  coord_flip()+
+  labs(title = "Categorias mas comunes")
+```
+
+```{r}
+categorical_counts %>% 
+  filter(type != "expansion") %>% 
+  group_by(type) %>% 
+  top_n(10, value) %>% 
+  ungroup() %>% 
+  mutate(
+    value = fct_reorder(value, n),
+    type = fct_reorder(type, n, .desc = TRUE)) %>% 
+  ggplot(aes(
+    value,
+    n,
+    fill = type
+  ))+
+  geom_col(show.legend = FALSE)+
+  facet_wrap(~type, scales = "free")+
+  coord_flip()+
+  labs(title = "Categorias mas comunes")
+```
+## predict averange rating
+
+```{r}
+holdout_set <- board_games %>% 
+  filter(game_id %% 5 == 0)
+
+
+board_games_data <- board_games %>% 
+  filter(game_id %% 5 != 0)
+```
+
+```{r}
+board_games_data %>% 
+  group_by(year_published)%>% 
+  summarise(average_rating = mean(average_rating)) %>% 
+  ggplot(aes(
+    year_published,
+    average_rating
+  ))+
+  geom_line()
+```
+
+
+
+```{r}
+lm(average_rating ~ 1, data = board_games) %>% 
+  summary()
+```
+```{r}
+lm(average_rating ~ max_players, data = board_games) %>% 
+  summary()
+```
+```{r}
+#bernouli
+sqrt(0.0007056)
+```
+```{r}
+lm(average_rating ~ 
+     log2(max_players + 1)+
+     log2(max_playtime + 1)+
+     year_published, board_games_data) %>% 
+  summary()
+```
+```{r}
+library(broom)
+lm(average_rating ~ 
+     log2(max_players + 1)+
+     log2(max_playtime + 1)+
+     year_published, board_games_data) %>% 
+  tidy()
+```
+
+## prediction
+
+```{r}
+
+by_categorical <- board_games_data %>% 
+  inner_join(categorical_variables, by = c("game_id", "name")) %>% 
+  select(type, value, average_rating) %>% 
+  group_by(type, value) %>% 
+  summarise(games = n(), 
+            average_rating = mean(average_rating)) %>% 
+  arrange(desc(games))
+
+by_categorical
+```
+
+```{r}
+board_games_data %>% 
+  inner_join(categorical_variables, by = c("game_id", "name")) %>% 
+  filter(type == "category") %>% 
+  mutate(value = fct_lump(value, 15),
+         value = fct_reorder(value, average_rating)) %>% 
+  ggplot(aes(
+    value,
+    average_rating
+  ))+
+  geom_boxplot()+
+  coord_flip()
+```
+```{r}
+board_games_data %>% 
+  inner_join(categorical_variables, by = c("game_id", "name")) %>% 
+  filter(type == "family") %>% 
+  mutate(value = fct_lump(value, 15),
+         value = fct_reorder(value, average_rating)) %>% 
+  ggplot(aes(
+    value,
+    average_rating
+  ))+
+  geom_boxplot()+
+  coord_flip()
+```
+```{r}
+board_games_data %>% 
+  inner_join(categorical_variables, by = c("game_id", "name")) %>% 
+  filter(type == "artist") %>% 
+  mutate(value = fct_lump(value, 15),
+         value = fct_reorder(value, average_rating)) %>% 
+  ggplot(aes(
+    value,
+    average_rating
+  ))+
+  geom_boxplot()+
+  coord_flip()
+```
+
+```{r}
+library(glmnet)
+library(tidytext)
+library(Matrix)
+
+features <- categorical_variables %>% 
+  unite(feature, type, value) %>% 
+  add_count(feature) %>% 
+  filter(n >= 50) %>% 
+  arrange(desc(n)) 
+
+
+#predictor
+feature_matrix <- features %>% 
+  cast_sparse(game_id, feature)
+
+# what i'm predicting
+ratings <- board_games$average_rating[match(rownames(feature_matrix), board_games$game_id)]
+
+lasso_fit <- glmnet(feature_matrix, ratings)
+
+lasso_fit %>% 
+  tidy()
+
+```
+```{r}
+plot(lasso_fit)
+```
+
+```{r}
+cv_lasso <- cv.glmnet(feature_matrix, ratings)
+plot(cv_lasso)
+```
+
+
