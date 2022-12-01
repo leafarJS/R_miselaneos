@@ -1,0 +1,279 @@
+---
+title: "18_exercice"
+author: "jorge_callejo"
+date: "2022-11-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, echo=FALSE}
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(countrycode)
+library(ggplot2)
+library(plotly)
+theme_set(theme_minimal())
+```
+
+```{r}
+seattle_pets <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-03-26/seattle_pets.csv") %>% 
+  mutate(license_issue_date = mdy(license_issue_date)) 
+```
+
+```{r}
+seattle_pets %>% 
+  count(species, sort = TRUE)
+```
+
+```{r}
+seattle_pets %>% 
+  count(animals_name, sort = TRUE)
+```
+```{r}
+seattle_pets %>% 
+  count(primary_breed, sort = TRUE)
+```
+```{r}
+seattle_pets %>% 
+  count(year = year(license_issue_date))
+```
+
+
+
+```{r}
+seattle_pets %>% 
+  ggplot(aes(
+    license_issue_date
+  ))+
+  geom_histogram(bins = 30)
+```
+
+```{r}
+seattle_pets %>% 
+  count(species, primary_breed, sort = TRUE) %>% 
+  filter(species == "Cat") %>% 
+  head(16) %>% 
+  mutate(primary_breed = fct_reorder(primary_breed, n)) %>% 
+  ggplot(aes(
+    primary_breed,
+    n
+  ))+
+  geom_col()+
+  coord_flip()
+```
+```{r}
+seattle_pets %>% 
+  count(species, primary_breed, sort = TRUE) %>% 
+  filter(species == "Dog") %>% 
+  head(16) %>% 
+  mutate(primary_breed = fct_reorder(primary_breed, n)) %>% 
+  ggplot(aes(
+    primary_breed,
+    n
+  ))+
+  geom_col()+
+  coord_flip()
+```
+```{r}
+seattle_pets %>% 
+  count(species, primary_breed, sort = TRUE) %>% 
+  filter(species == "Cat") %>% 
+  mutate(percent = n / sum(n)) %>% 
+  head(16) %>% 
+  mutate(primary_breed = fct_reorder(primary_breed, percent)) %>% 
+  ggplot(aes(
+    primary_breed,
+    percent
+  ))+
+  geom_col()+
+  scale_y_continuous(labels = scales::percent_format())+
+  coord_flip()
+```
+```{r}
+seattle_pets %>% 
+  count(species, primary_breed, sort = TRUE) %>% 
+  filter(species %in% c("Cat", "Dog")) %>% 
+  mutate(percent = n / sum(n)) %>% 
+  group_by(species) %>% 
+  top_n(10, percent) %>% 
+  mutate(primary_breed = fct_reorder(primary_breed, percent)) %>% 
+  ggplot(aes(
+    primary_breed,
+    percent
+  ))+
+  geom_col()+
+  scale_y_continuous(labels = scales::percent_format())+
+  facet_wrap(~species)+
+  coord_flip()
+```
+
+```{r}
+seattle_pets %>% 
+  count(species, primary_breed, sort = TRUE) %>% 
+  filter(species %in% c("Cat", "Dog")) %>% 
+  mutate(percent = n / sum(n)) %>% 
+  group_by(species) %>% 
+  top_n(10, percent) %>% 
+  ungroup() %>% 
+  mutate(primary_breed = fct_reorder(primary_breed, percent)) %>% 
+  ggplot(aes(
+    primary_breed,
+    percent,
+    fill = species
+  ))+
+  geom_col(show.legend = FALSE)+
+  scale_y_continuous(labels = scales::percent_format())+
+  facet_wrap(~species, scales = "free")+
+  coord_flip()
+```
+
+```{r}
+seattle_pets %>% 
+  count(species, primary_breed, sort = TRUE) %>% 
+  filter(species %in% c("Cat", "Dog")) %>% 
+  mutate(percent = n / sum(n)) %>% 
+  group_by(species) %>% 
+  top_n(10, percent) %>% 
+  ungroup() %>% 
+  mutate(primary_breed = fct_reorder(primary_breed, percent)) %>% 
+  ggplot(aes(
+    primary_breed,
+    percent,
+    fill = species
+  ))+
+  geom_col(show.legend = FALSE)+
+  scale_y_continuous(labels = scales::percent_format())+
+  facet_wrap(~species, scales = "free_y", ncol = 1)+
+  coord_flip()
+```
+
+```{r}
+dogs <- seattle_pets %>% 
+  filter(species == "Dog")
+```
+
+
+```{r}
+name_breed_counts <- dogs %>% 
+  group_by(animals_name) %>% 
+  mutate(name_total = n()) %>% 
+  group_by(primary_breed) %>% 
+  mutate(breed_total = n()) %>% 
+  ungroup() %>% 
+  count(animals_name, primary_breed, name_total, breed_total)
+```
+
+```{r}
+total_dog <- nrow(dogs)
+
+hypergeom_test <- name_breed_counts %>% 
+  filter(name_total >= 200, breed_total >= 200) %>% 
+  mutate(percent_of_breed = n / breed_total, 
+         percent_overrall = name_total / total_dog,
+         overrepresented_ratio = percent_of_breed / percent_overrall) %>% 
+  arrange(desc(overrepresented_ratio)) %>% 
+  mutate(hypergeom_p_value = 1 - phyper(n, name_total, total_dog - name_total, breed_total))
+```
+
+```{r}
+hypergeom_test %>% 
+  ggplot(aes(hypergeom_p_value))+
+  geom_histogram(binwidth = .05)
+```
+
+```{r}
+name_counts <- dogs %>% 
+  group_by(animals_name) %>% 
+  summarise(name_total = n()) %>% 
+  filter(name_total >= 100) 
+
+breed_counts<- dogs %>% 
+  group_by(primary_breed) %>% 
+  summarise(breed_total = n()) %>% 
+  filter(breed_total >= 200) 
+```
+
+```{r}
+home_breed_counts <- dogs %>% 
+  count(primary_breed, animals_name) %>% 
+  complete(primary_breed, animals_name, fill = list(n = 0)) %>% 
+  inner_join(name_counts, by = "animals_name") %>% 
+  inner_join(breed_counts, by = "primary_breed")
+```
+
+```{r}
+hipergeom_test_1 <- home_breed_counts %>% 
+   mutate(percent_of_breed = n / breed_total, 
+         percent_overrall = name_total / total_dog,
+         overrepresented_ratio = percent_of_breed / percent_overrall) %>% 
+  arrange(desc(overrepresented_ratio)) %>% 
+  mutate(hypergeom_p_value = 1 - phyper(n, name_total, total_dog - name_total, breed_total),
+         holm_p_value = p.adjust(hypergeom_p_value),
+         fdr = p.adjust(hypergeom_p_value, method = "fdr")) 
+  
+```
+
+
+
+```{r}
+hipergeom_test_1 %>% 
+  ggplot(aes(hypergeom_p_value))+
+  geom_histogram(binwidth = .05)
+```
+
+```{r}
+hipergeom_test_1 %>% 
+  filter(n != 0) %>% 
+  arrange(hypergeom_p_value) %>% 
+  ggplot(aes(
+    hypergeom_p_value
+  ))+
+  geom_histogram(binwidth = .1)+
+  labs(x = "Ome-sides hypergeometric p-values for averrepresented name")
+```
+
+```{r}
+hipergeom_test_1 %>% 
+  filter(n == 0) %>% 
+  arrange(hypergeom_p_value) %>% 
+  ggplot(aes(
+    hypergeom_p_value
+  ))+
+  geom_histogram(binwidth = .1)+
+  labs(x = "Ome-sides hypergeometric p-values for averrepresented name")
+```
+
+
+
+```{r}
+crossing(name_total = c(100,200,300),
+         breed_total = seq(200,1000,25)) %>%
+  mutate(max_p_value =  1 - phyper(0, name_total, total_dog - name_total, breed_total)) %>% 
+           ggplot(aes(
+             breed_total,
+             max_p_value,
+             color = factor(name_total)
+             ))+
+           geom_line()+
+           labs(x = "Total # of dogs in breed")
+  
+```
+
+```{r}
+hipergeom_test_1 %>% 
+  filter(fdr <= .05) %>% 
+  arrange(fdr) %>% 
+  transmute(`Breed` = primary_breed ,
+            `Name` = animals_name ,
+            `# of dogs with name` = n,
+            `% of breed` = percent(percent_of_breed),
+            `% overall` =  percent(percent_overrall),
+            `FDR-adjusted p-value` = fdr ) %>% 
+  knitr::kable()
+```
+
