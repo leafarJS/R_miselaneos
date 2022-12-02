@@ -1,0 +1,438 @@
+---
+title: "19_exercice"
+author: "jorge_callejo"
+date: "2022-12-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(countrycode)
+library(ggplot2)
+library(plotly)
+theme_set(theme_minimal())
+```
+
+```{r}
+bike_traffic_row <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-04-02/bike_traffic.csv") 
+
+
+bike_traffic <- bike_traffic_row %>% 
+  mutate(date = mdy_hms(date))
+```
+
+```{r}
+bike_traffic %>% 
+  count(crossing, direction) %>% 
+  knitr::kable()
+```
+
+```{r}
+bike_traffic %>% 
+  ggplot(aes(
+    date,
+    fill = is.na(bike_count)
+  ))+
+  geom_histogram(bins = 30)+
+  facet_grid(crossing ~ direction)+
+  theme(legend.position = "bottom")
+```
+```{r}
+bike_traffic %>% 
+  group_by(hour = hour(date)) %>% 
+  summarise_at(vars(bike_count, ped_count), sum, na.rm = TRUE) %>% 
+  ggplot(aes(
+    hour,
+    bike_count
+  ))+
+  geom_line()+
+  scale_x_continuous(breaks = seq(0,24,4))
+```
+
+```{r}
+bike_traffic %>% 
+  group_by(hour = hour(date)) %>% 
+  summarise_at(vars(bike_count, ped_count), sum, na.rm = TRUE) %>% 
+  ggplot(aes(
+    hour,
+    ped_count
+  ))+
+  geom_line()+
+  scale_x_continuous(breaks = seq(0,24,4))
+```
+
+```{r}
+bike_traffic %>% 
+  group_by(hour = hour(date), crossing) %>% 
+  summarise_at(vars(bike_count, ped_count), sum, na.rm = TRUE) %>% 
+  ggplot(aes(
+    hour,
+    ped_count, 
+    color = crossing
+  ))+
+  geom_line()+
+  geom_point()+
+  scale_x_continuous(breaks = seq(0,24,4))
+```
+
+
+
+
+
+
+```{r}
+```{r}
+bike_traffic %>% 
+  group_by(hour = hour(date), crossing) %>% 
+  summarise_at(vars(bike_count, ped_count), sum, na.rm = TRUE) %>% 
+  ggplot(aes(
+    hour,
+    ped_count, 
+    color = crossing
+  ))+
+  geom_line(show.legend = FALSE)+
+  geom_point()+
+  scale_x_continuous(breaks = seq(0,24,4))+
+  facet_wrap(~crossing)
+```
+
+```{r}
+bike_traffic %>% 
+  group_by(crossing, hour = hour(date)) %>% 
+  summarise_at(vars(bike_count, ped_count), sum, na.rm = TRUE) %>% 
+  mutate(percent_bike = bike_count / sum(bike_count)) %>% 
+  ggplot(aes(
+    hour,
+    percent_bike,
+    color = crossing
+  ))+
+  geom_line()+
+  geom_point()+
+  scale_y_continuous(labels = scales::percent_format())+
+  scale_x_continuous(breaks = seq(0,24,4))
+
+```
+
+
+```{r}
+bike_traffic %>% 
+  group_by(crossing, hour = hour(date)) %>% 
+  summarise_at(vars(bike_count, ped_count), sum, na.rm = TRUE) %>% 
+  mutate(percent_bike = bike_count / sum(bike_count)) %>% 
+  ggplot(aes(
+    hour,
+    percent_bike,
+    color = crossing
+  ))+
+  geom_line()+
+  geom_point()+
+  scale_x_continuous(breaks = seq(0,24,4))+
+  scale_y_continuous(labels = scales::percent_format())+
+  facet_wrap(~crossing, scale = "free_y")+
+  theme(legend.position = "none")
+```
+```{r}
+bike_time_window <- bike_traffic %>% 
+  mutate(hour = hour(date)) %>% 
+  mutate(time_window = case_when(
+    between(hour, 7, 10) ~ "Morning commute",
+    between(hour, 11, 15) ~ "midday",
+    between(hour, 16, 18) ~ "Evening commute",
+    TRUE ~ "Night"
+  )) %>% 
+  group_by(crossing, time_window) %>% 
+  summarise(number_missing = sum(is.na(bike_count)),
+            bike_count = sum(bike_count, na.rm = TRUE)) %>% 
+  mutate(percent_bike = bike_count / sum(bike_count)) 
+```
+```{r}
+bike_time_window %>% 
+  select(-number_missing,  -bike_count) %>% 
+  spread(time_window, percent_bike) %>% 
+  mutate(totalcommute = `Evening commute` + `Morning commute`) %>% 
+  arrange(desc(totalcommute)) 
+
+
+```
+
+```{r}
+bike_time_window %>% 
+  mutate(time_window = fct_reorder(time_window, percent_bike)) %>% 
+  ggplot(aes(
+    time_window,
+    percent_bike,
+    fill = crossing
+  ))+
+  geom_col(show.legend = FALSE)+
+  coord_flip()+
+  facet_wrap(~crossing)
+```
+```{r}
+dispersion_rout <- bike_time_window %>% 
+  group_by(crossing) %>% 
+  summarise(total_bike = sum(bike_count),
+            percent_commute = sum(bike_count[str_detect(time_window, "commute")])/total_bike)
+  
+```
+
+```{r}
+dispersion_rout %>% 
+  ggplot(aes(
+    total_bike ,
+    percent_commute
+  ))+
+  geom_point()+
+  geom_smooth(method = "lm", formula = 'y ~ x')+
+  scale_x_log10()
+```
+```{r}
+bike_traffic %>% 
+  group_by(crossing,
+           weekday = wday(date, label = TRUE),
+           hour = hour(date)) %>%
+  summarise(total_bikes = sum(bike_count, na.rm = TRUE)) %>% 
+  group_by(crossing) %>% 
+  mutate(percent_bike = total_bikes/ sum(total_bikes)) %>% 
+  ggplot(aes(
+    hour,
+    percent_bike,
+    color = crossing
+  ))+
+  geom_line(show.legend = FALSE)+
+  facet_grid(crossing ~ weekday)+
+  scale_x_continuous(breaks = seq(0,24,4))+
+  scale_y_continuous(labels = scales::percent_format())+
+  labs(x = "Time of week",
+       y = "% of bike crossings happening in this hour",
+       title = "When in the week do people in seatle bike?",
+       subtitle = "based on crossings from 2014 - february 2019")
+
+```
+```{r}
+bike_traffic %>% 
+  filter(bike_count < 2000) %>% 
+  select(-ped_count) %>% 
+  group_by(crossing,
+           date = as.Date(date)) %>% 
+  summarise(total_bike = sum(bike_count)) %>% 
+  ggplot(aes(
+    date,
+    total_bike,
+    color = crossing
+  ))+
+  geom_line()
+```
+
+```{r}
+bike_traffic %>% 
+  filter(bike_count < 2000) %>% 
+  select(-ped_count) %>% 
+  group_by(crossing,
+           date = as.Date(date)) %>% 
+  summarise(total_bike = sum(bike_count)) %>% 
+  ggplot(aes(
+    date,
+    total_bike,
+    color = crossing
+  ))+
+  geom_line(show.legend = FALSE)+
+  expand_limits(y = 0)+
+  facet_wrap(~crossing)
+```
+```{r}
+bike_traffic %>% 
+  filter(bike_count < 2000) %>% 
+  select(-ped_count) %>% 
+  group_by(crossing,
+           date = floor_date(date, "month")) %>% 
+  summarise(total_bike = sum(bike_count)) %>% 
+  ggplot(aes(
+    date,
+    total_bike,
+    color = crossing
+  ))+
+  geom_line()+
+  theme(legend.position = "bottom")
+```
+```{r}
+bike_traffic %>% 
+  filter(bike_count < 2000) %>% 
+  select(-ped_count) %>% 
+  group_by(crossing,
+           date = floor_date(date, "week")) %>% 
+  summarise(total_bike = sum(bike_count)) %>% 
+  ggplot(aes(
+    date,
+    total_bike,
+    color = crossing
+  ))+
+  geom_line()+
+  theme(legend.position = "bottom")
+```
+```{r}
+bike_traffic %>% 
+  filter(bike_count < 2000) %>% 
+  select(-ped_count) %>% 
+  group_by(crossing,
+           date = floor_date(date, "year")) %>% 
+  summarise(total_bike = sum(bike_count)) %>% 
+  ggplot(aes(
+    date,
+    total_bike,
+    color = crossing
+  ))+
+  geom_line()+
+  theme(legend.position = "bottom")
+```
+```{r}
+bike_traffic %>% 
+  filter(bike_count < 2000, date < "2018-01-01") %>% 
+  select(-ped_count) %>% 
+  group_by(crossing,
+           month = fct_relevel(month.name[month(date)], month.name)) %>% 
+  summarise(total_bikes = sum(bike_count, na.rm = TRUE)) %>%
+  mutate(percent_bike =  total_bikes/sum(total_bikes)) %>% 
+  ggplot(aes(
+    month,
+    percent_bike,
+    color = crossing,
+    group = crossing
+  ))+
+  geom_line()+
+  expand_limits(y = 0)+
+  scale_y_continuous(labels = scales::percent_format())+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs(title = "What tiem of year do people bike?",
+       subtitle = "Based on 2014 - 2017 bike crossing",
+       y = "% of yearly trips in this month", 
+       x = "")+
+  theme(legend.position = "bottom")
+  
+```
+## what direcctions do people commute?
+
+```{r}
+bike_rout_commute <- bike_traffic %>% 
+  filter(bike_count < 2000,
+         crossing != "MTS Trail",
+         !wday(date, label = TRUE) %in% c("Sat","Sun")) %>%
+  mutate(hour= hour(date)) %>% 
+  select(-ped_count) %>% 
+  mutate(hour = hour(date)) %>% 
+  mutate(commute = case_when(
+    between(hour, 7, 9) ~ "morning",
+    between(hour, 16, 18) ~ "evening"
+  )) %>% 
+  filter(!is.na(commute)) %>% 
+  group_by(crossing,
+           direction,
+           commute) %>% 
+  summarise(bike_count = sum(bike_count, na.rm = TRUE))
+```
+```{r}
+bike_rout_commute %>% 
+  spread(commute, bike_count) %>% 
+  mutate(ratio =  evening / morning) %>% 
+  ggplot(aes(
+    direction,
+    ratio
+  ))+
+  geom_col()+
+  scale_y_log10(breaks = c(.5,1,2,4,8),
+                labels = c("1/2", "Same", "2x", "4x", "8x"))+
+  facet_wrap(~crossing, scales = "free_x")
+```
+
+```{r}
+bike_direction_hour_crossing <- bike_traffic %>% 
+  filter(bike_count < 2000) %>% 
+  select(-ped_count) %>% 
+  filter(crossing != "MTS Trail",
+         !wday(date, label = TRUE) %in% c("Sat","Sun"),
+         direction %in%  c("North", "South")) %>% 
+  mutate(hour = hour(date)) %>% 
+  group_by(crossing,
+           direction,
+           hour) %>% 
+  summarise(bike_count = sum(bike_count, na.rm = TRUE)) %>% 
+  mutate(percent_bike = bike_count / sum(bike_count))
+```
+```{r}
+bike_direction_hour_crossing %>% 
+  group_by(crossing) %>% 
+  mutate(average_hour = sum(hour * percent_bike)[direction = "North"]) %>% 
+  ungroup() %>% 
+  mutate(crossing = fct_reorder(crossing, average_hour)) %>% 
+  ggplot(aes(
+    hour, 
+    percent_bike, 
+    color = crossing
+  ))+
+  geom_line(show.legend = FALSE)+
+  facet_grid(crossing ~ direction)+
+  scale_y_continuous(labels = scales::percent_format())+
+  labs(title = "What tiem of year do people bike?",
+       subtitle = "Based on 2014 - 2017 bike crossing",
+       y = "% of yearly trips in this month", 
+       x = "")
+  
+```
+
+
+```{r}
+bike_direction_hour_crossing %>% 
+  group_by(crossing) %>% 
+  mutate(average_hour = sum(hour * percent_bike)[direction = "North"]) %>% 
+  ungroup() %>% 
+  mutate(crossing = fct_reorder(crossing, average_hour)) %>% 
+  ggplot(aes(
+    hour, 
+    percent_bike, 
+    color = direction
+  ))+
+  geom_line()+
+  facet_grid(crossing ~ .)+
+  scale_y_continuous(labels = scales::percent_format())+
+  labs(title = "What tiem of year do people bike?",
+       subtitle = "Based on 2014 - 2017 bike crossing",
+       y = "% of yearly trips in this month", 
+       x = "",
+       color = "Direction")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
