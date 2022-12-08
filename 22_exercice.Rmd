@@ -1,0 +1,244 @@
+---
+title: "22_exercice"
+author: "jorge_callejo"
+date: "2022-12-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(countrycode)
+library(ggplot2)
+library(plotly)
+theme_set(theme_minimal())
+```
+
+```{r, include=FALSE}
+imp_light <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-04-30/mp_light.csv")
+
+bird_collisions <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-04-30/bird_collisions.csv") %>% left_join(imp_light, by = "date") 
+  
+```
+
+
+```{r}
+bird_collisions %>% 
+  ggplot(aes(
+    date,
+    fill = locality
+  ))+
+  geom_histogram(bins = 30)
+```
+
+```{r}
+bird_collisions %>% 
+  count(genus, sort = TRUE) %>%
+  mutate(genus = fct_reorder(genus, n)) %>%   head(16) %>% 
+  ggplot(aes(
+    genus,
+    n
+  ))+
+  geom_col()+
+  coord_flip()
+```
+ejemplo para aplicar cuando se trabaja con muchos factoreS
+
+```{r}
+bird_collisions %>% 
+  gather(category, value, -date, -light_score) %>% 
+  count(category, value) %>% 
+  group_by(category) %>% 
+  top_n(16, n) %>% 
+  ungroup() %>% 
+  mutate(value = fct_reorder(value, n)) %>% 
+  ggplot(aes(
+    value,
+    n,
+    fill = category
+  ))+
+  geom_col(show.legend = FALSE)+
+  facet_wrap(~category, scales = "free_y")+
+  coord_flip()
+```
+```{r}
+bird_collisions %>% 
+  gather(category, value, -date, -light_score) %>% 
+  count(category, value) %>% 
+  group_by(category) %>% 
+  top_n(16, n) %>% 
+  ungroup() %>% 
+  mutate(value = fct_reorder(value, n),
+         category = fct_reorder(category, n, length)) %>% 
+  ggplot(aes(
+    value,
+    n,
+    fill = category
+  ))+
+  geom_col(show.legend = FALSE)+
+  facet_wrap(~category, scales = "free_y")+
+  coord_flip()+
+  labs(x = "# of colisións",
+       y = "",
+       title = "Category breakdowns of collisiones")
+```
+```{r}
+bird_collisions %>% 
+  gather(category, value, -date, -light_score) %>% 
+  count(category, value, light_score_missing = is.na(light_score)) %>% 
+  group_by(category) %>% 
+  top_n(16, n) %>% 
+  ungroup() %>% 
+  mutate(value = fct_reorder(value, n, sum),
+         category = fct_reorder(category, n, length)) %>% 
+  ggplot(aes(
+    value,
+    n,
+    fill = light_score_missing
+  ))+
+  geom_col()+
+  facet_wrap(~category, scales = "free_y")+
+  coord_flip()+
+  labs(x = "# of colisións",
+       y = "",
+       title = "Category breakdowns of collisiones")+
+  theme(legend.position = "bottom")
+```
+
+```{r}
+bird_collisions %>% 
+  filter(!is.na(light_score)) %>% 
+  count(date) %>% 
+  ggplot(aes(
+    n
+  ))+
+  geom_histogram(bins = 30)
+```
+
+```{r}
+bird_collisions %>% 
+  filter(!is.na(light_score)) %>% 
+  count(date) %>% 
+  ggplot(aes(
+    n
+  ))+
+  geom_histogram(bins = 30)+
+  scale_x_log10()
+```
+
+```{r}
+bird_collisions %>% 
+  filter(!is.na(light_score)) %>% 
+  count(date, locality) %>% 
+  ggplot(aes(
+    n,
+    fill = locality
+  ))+
+   geom_histogram(bins = 30)+
+  scale_x_log10()
+```
+
+```{r}
+bird_collisions %>% 
+  filter(!is.na(light_score)) %>% 
+  count(date, locality) %>% 
+  ggplot(aes(
+    n,
+    fill = locality,
+
+  ))+
+  geom_density(alpha =0.25)+
+  scale_x_log10()
+```
+
+
+
+```{r}
+bird_collisions %>% 
+  filter(!is.na(light_score)) %>% 
+  distinct(date, light_score) %>% 
+  ggplot(aes(
+    light_score
+  ))+
+  geom_histogram(bins = 30)
+```
+
+```{r}
+by_day_mp_1 <- bird_collisions %>% 
+  filter(!is.na(light_score),
+         locality == "MP") %>% 
+  group_by(date) %>% 
+  summarise(collisions = n()) %>% 
+  ungroup() %>% 
+  right_join(imp_light, by = "date") %>% 
+  filter(date <= "2016-11-13") %>% 
+  replace_na(list(collisions = 0)) 
+```
+
+
+
+```{r}
+by_day_mp %>% 
+  group_by(light_score) %>% 
+  summarise(avg_collision = mean(collisions)) %>% 
+  ggplot(aes(
+    light_score, 
+    avg_collision
+  ))+
+  geom_line()+
+  expand_limits(y = 0)+
+  labs(y = "Geometric mean of the number of collisions in a night")
+```
+
+```{r}
+by_day_mp %>% 
+  group_by(light_score) %>% 
+  summarise(avg_collision = exp(mean(log(collisions+1))-1)) %>% 
+  ggplot(aes(
+    light_score, 
+    avg_collision
+  ))+
+  geom_line()+
+  expand_limits(y = 0)+
+  labs(x = "light score at McCormick plac higher means mor light on",    y = "Geometric mean of the number of collisions in a night",
+       title = "Brighter lights at McCormick place corrlate with more bird collisions")
+```
+
+```{r}
+#install.packages("rsample")
+library(rsample)
+geom_mean <- function(x) {
+  exp(mean(log(x + 1))-1)
+}
+
+by_day_mp %>% 
+  filter(light_score == 3) %>% 
+  bootstraps(times = 100) %>% 
+  mutate(static = map_dbl(splits, ~geom_mean(as.data.frame(.)$collisions))) %>% 
+  ggplot(aes(
+    static
+  ))+
+  geom_histogram(bins = 30)
+  
+ 
+```
+
+```{r}
+bird_collisions %>% 
+  filter(date >= "2005-01-01") %>% 
+  count(month = month(date, label = TRUE), 
+        locality) %>%
+  ggplot(aes(
+    month,
+    n,
+    color = locality, 
+    group = locality
+  ))+
+  geom_line()+
+  geom_smooth(method = 'loess',formula = 'y ~ x')+
+  facet_wrap(~locality, ncol = 1)
+```
+
+

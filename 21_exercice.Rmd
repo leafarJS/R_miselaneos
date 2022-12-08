@@ -1,0 +1,38 @@
+---
+title: "21_exercice"
+author: "jorge_callejo"
+date: "2022-12-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(countrycode)
+library(ggplot2)
+library(plotly)
+theme_set(theme_minimal())
+```
+
+```{r, include=FALSE}
+student_ratio <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-05-07/student_teacher_ratio.csv")
+```
+
+```{r}
+student_ratio %>% 
+  count(country) %>% 
+  knitr::kable()
+```
+
+```{r}
+student_ratio %>% 
+  group_by(indicator, country, 
+edulit_ind) %>% 
+  count(indicator)
+```
+
