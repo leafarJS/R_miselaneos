@@ -36,3 +36,26 @@ edulit_ind) %>%
   count(indicator)
 ```
 
+```{r}
+student_ratio %>% 
+  count(year, sort = TRUE)
+```
+```{r}
+student_ratio %>% 
+  count(indicator, sort = TRUE)
+```
+```{r}
+student_ratio %>% 
+  filter(indicator == "Primary Education",
+         year == 2015) %>% 
+  arrange(desc(student_ratio)) %>% 
+  head(16) %>% 
+  mutate(country = fct_reorder(country, student_ratio)) %>% 
+  ggplot(aes(
+    country,
+    student_ratio
+  ))+
+  geom_col()+
+  coord_flip()
+```
+
