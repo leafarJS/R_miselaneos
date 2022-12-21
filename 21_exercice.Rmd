@@ -59,3 +59,532 @@ student_ratio %>%
   coord_flip()
 ```
 
+```{r}
+student_ratio %>% 
+  filter(indicator == "Primary Education",
+         year == 2015) %>% 
+  arrange(desc(student_ratio)) %>% 
+  slice(c(1:10, seq(n() - 10, n())))%>% 
+  mutate(country = fct_reorder(country, student_ratio)) %>% 
+  ggplot(aes(
+    country,
+    student_ratio
+  ))+
+  geom_col()+
+  coord_flip()
+```
+
+
+
+```{r}
+student_ratio %>% 
+  na.omit(indicator) %>% 
+  filter(indicator == "Primary Education",
+         year == 2015) %>% 
+  arrange(desc(student_ratio)) %>% 
+  slice(c(1:10, seq(n() - 10, n())))%>% 
+  mutate(country = fct_reorder(country, student_ratio)) %>% 
+  ggplot(aes(
+    country,
+    student_ratio
+  ))+
+  geom_point()+
+  coord_flip()
+```
+```{r}
+student_ratio %>% 
+  filter(indicator == "Primary Education",
+         year == 2015,
+         !is.na(student_ratio)) %>% 
+  arrange(desc(student_ratio)) %>% 
+  slice(c(1:10, seq(n() - 10, n())))%>% 
+  mutate(country = fct_reorder(country, student_ratio)) %>% 
+  ggplot(aes(
+    country,
+    student_ratio
+  ))+
+  geom_point()+
+  coord_flip()+
+  expand_limits(y = 0)+
+  labs(title = "Countries with the highest and lowest student/teacher ratios",
+       x = "",
+       y = "Student/teacher ratio")
+```
+
+```{r}
+#install.packages("WDI")
+library(WDI)
+# INDICADORES DE DESARROLLO DEL BANCO MUNDIAL 
+student_teacher_ratio_2015 <- student_ratio %>% 
+  filter(indicator == "Primary Education",
+         year == 2015,
+         !is.na(student_ratio))
+```
+
+
+```{r}
+WDIsearch("gdp per capita") %>% 
+  view()
+```
+
+```{r}
+gdp_per_capita <- WDI(indicator = "NY.GDP.PCAP.CD", start = 2015, end = 2015, extra = TRUE) %>% 
+    tibble::as_tibble() %>% 
+  select(country_code = iso3c, gdp_per_capita = NY.GDP.PCAP.CD )
+```
+```{r}
+student_teacher_ratio_2015 %>% 
+  ggplot(aes(
+    student_ratio
+  ))+
+  geom_histogram(bins = 30)
+```
+```{r}
+student_teacher_ratio_2015 %>% 
+  ggplot(aes(
+    student_ratio
+  ))+
+  geom_histogram(bins = 30)+
+  scale_x_log10()
+```
+
+
+```{r}
+student_teacher_ratio_2015 %>% 
+  inner_join(gdp_per_capita, by ="country_code")
+```
+```{r}
+student_teacher_ratio_2015 %>% 
+  inner_join(gdp_per_capita, by ="country_code") %>% 
+  ggplot(aes(
+    gdp_per_capita,
+    student_ratio
+  ))+
+  geom_point()+
+  scale_x_log10()+
+  scale_y_log10()+
+  labs(x = "GDP per Capita",
+       y = "student / teacher ratio", 
+       title = "GDP per capita an student/teacher ratio are negatively correlated",
+       subtitle = "In 2015")
+```
+**Se confirma que hay una correlación negativa entre paises y la proporción de alumnos/profesores**
+
+
+```{r}
+student_teacher_ratio_2015 %>% 
+  inner_join(gdp_per_capita, by ="country_code") %>% 
+  ggplot(aes(
+    gdp_per_capita,
+    student_ratio
+  ))+
+  geom_point()+
+  geom_smooth( method = 'loess',formula = 'y ~ x')+
+  scale_x_log10()+
+  scale_y_log10()+
+  geom_text(aes(
+    label = country
+  ),
+  vjust = 1,
+  check_overlap = TRUE)+
+  labs(x = "GDP per Capita",
+       y = "student / teacher ratio", 
+       title = "GDP per capita an student/teacher ratio are negatively correlated",
+       subtitle = "In 2015")
+```
+```{r}
+WDIsearch("population") %>%
+  as.data.frame() %>% 
+   tibble::as_tibble() %>%
+  filter(str_detect(name, "^Population")) %>% 
+  arrange(str_length(name))
+  
+```
+```{r}
+indicators_row <- WDI(indicator = c("NY.GDP.PCAP.CD","SP.POP.TOTL", "SP.POP.TOTL.MA.IN"),
+                  start = 2015, end = 2015, 
+                  extra = TRUE) %>% 
+   tibble::as_tibble() %>% 
+  view()
+
+
+indicators <- indicators_row %>% 
+  select(country_code = iso3c,
+         region,
+         NY.GDP.PCAP.CD:SP.POP.TOTL)
+
+indicators_2 <-indicators_row %>% 
+  select(country_code = iso3c,
+         region,
+          NY.GDP.PCAP.CD:SP.POP.TOTL.MA.IN) %>% 
+  view()
+```
+
+
+
+```{r}
+student_teacher_ratio_2015 %>% 
+  inner_join(indicators, by = "country_code") %>% 
+  ggplot(aes(
+    NY.GDP.PCAP.CD,
+    student_ratio
+  ))+
+  geom_point()+
+  geom_smooth( method = 'loess',formula = 'y ~ x')+
+  scale_x_log10()+
+  scale_y_log10()+
+  geom_text(aes(
+    label = country
+  ),
+  vjust = 1,
+  check_overlap = TRUE)+
+  labs(x = "GDP per Capita",
+       y = "student / teacher ratio", 
+       title = "GDP per capita an student/teacher ratio are negatively correlated",
+       subtitle = "In 2015")
+```
+
+```{r}
+student_teacher_ratio_2015 %>% 
+  inner_join(indicators, by = "country_code") %>% 
+  ggplot(aes(
+    NY.GDP.PCAP.CD,
+    student_ratio
+  ))+
+  geom_point(aes(
+    size = SP.POP.TOTL
+  ))+
+  geom_smooth( method = 'loess',formula = 'y ~ x')+
+  scale_x_log10()+
+  scale_y_log10()+
+  geom_text(aes(
+    label = country
+  ),
+  vjust = 1,
+  check_overlap = TRUE)+
+  labs(x = "GDP per Capita",
+       y = "student / teacher ratio", 
+       title = "GDP per capita an student/teacher ratio are negatively correlated",
+       subtitle = "In 2015")
+```
+```{r}
+student_teacher_ratio_2015 %>% 
+  inner_join(indicators, by = "country_code") %>% 
+  ggplot(aes(
+    NY.GDP.PCAP.CD,
+    student_ratio,
+    color = region
+  ))+
+  geom_point(aes(
+    size = SP.POP.TOTL
+  ))+
+  geom_smooth( method = 'loess',formula = 'y ~ x')+
+  scale_x_log10()+
+  scale_y_log10()+
+  geom_text(aes(
+    label = country
+  ),
+  vjust = 1,
+  check_overlap = TRUE)+
+  labs(x = "GDP per Capita",
+       y = "student / teacher ratio", 
+       title = "GDP per capita an student/teacher ratio are negatively correlated",
+       subtitle = "In 2015")
+```
+```{r}
+student_teacher_ratio_2015 %>% 
+  inner_join(indicators, by = "country_code") %>% 
+  arrange(desc(SP.POP.TOTL)) %>% 
+  ggplot(aes(
+    NY.GDP.PCAP.CD,
+    student_ratio,
+    color = region
+  ))+
+  geom_point(aes(
+    size = SP.POP.TOTL
+  ))+
+  scale_x_log10()+
+  scale_y_log10()+
+  geom_text(aes(
+    label = country
+  ),
+  vjust = 1,
+  check_overlap = TRUE)+
+  labs(x = "GDP per Capita",
+       y = "student / teacher ratio", 
+       title = "GDP per capita an student/teacher ratio are negatively correlated",
+       subtitle = "In 2015")
+```
+
+```{r}
+student_teacher_ratio_2015 %>% 
+  inner_join(indicators, by = "country_code") %>% 
+  arrange(desc(SP.POP.TOTL)) %>% 
+  top_n(50, SP.POP.TOTL) %>% 
+  ggplot(aes(
+    NY.GDP.PCAP.CD,
+    student_ratio,
+    color = region
+  ))+
+  geom_point(aes(
+    size = SP.POP.TOTL
+  ))+
+  scale_x_log10()+
+  scale_y_log10()+
+  geom_text(aes(
+    label = country
+  ),
+  vjust = 1,
+  check_overlap = TRUE)+
+  labs(x = "GDP per Capita",
+       y = "student / teacher ratio", 
+       title = "GDP per capita an student/teacher ratio are negatively correlated",
+       subtitle = "In 2015 for top 50")
+```
+
+
+```{r}
+student_teacher_ratio_2015 %>% 
+  inner_join(indicators, by = "country_code") %>% 
+  arrange(desc(SP.POP.TOTL)) %>% 
+  top_n(50, SP.POP.TOTL) %>% 
+  ggplot(aes(
+    NY.GDP.PCAP.CD,
+    student_ratio,
+    color = region
+  ))+
+  geom_point(aes(
+    size = SP.POP.TOTL
+  ))+
+  scale_x_log10()+
+  scale_y_log10()+
+  scale_size_continuous(labels = scales::comma_format(), 
+                        range = c(0.25, 12))+
+  geom_text(aes(
+    label = country
+  ),
+  vjust = 1,
+  check_overlap = TRUE)+
+  labs(x = "GDP per Capita",
+       y = "student / teacher ratio", 
+       title = "GDP per capita an student/teacher ratio are negatively correlated",
+       subtitle = "In 2015 for top 50",
+       color = "Region", 
+       size = "Population")
+```
+
+
+```{r}
+student_teacher_ratio_2015 %>% 
+  inner_join(indicators, by = "country_code") %>% 
+  arrange(desc(SP.POP.TOTL)) %>% 
+  top_n(100, SP.POP.TOTL) %>% 
+  ggplot(aes(
+    NY.GDP.PCAP.CD,
+    student_ratio,
+    color = region
+  ))+
+  geom_point(aes(
+    size = SP.POP.TOTL
+  ))+
+  scale_x_log10()+
+  scale_y_log10()+
+  scale_size_continuous(labels = scales::comma_format(), 
+                        range = c(0.25, 12))+
+  geom_text(aes(
+    label = country
+  ),
+  vjust = 1,
+  check_overlap = TRUE)+
+  labs(x = "GDP per Capita",
+       y = "student / teacher ratio", 
+       title = "GDP per capita an student/teacher ratio are negatively correlated",
+       subtitle = "In 2015 for top 100",
+       color = "Region", 
+       size = "Population")
+```
+
+```{r}
+student_ratio %>% 
+  filter(year == 2015, 
+         !is.na(student_ratio), 
+         indicator %in% c("Primary Education", "Secondary Education")) %>% 
+   inner_join(indicators, by = "country_code") %>% 
+  arrange(desc(SP.POP.TOTL)) %>% 
+  top_n(100, SP.POP.TOTL) %>% 
+  ggplot(aes(
+    NY.GDP.PCAP.CD,
+    student_ratio,
+    color = region
+  ))+
+  geom_point(aes(
+    size = SP.POP.TOTL
+  ))+
+  scale_x_log10()+
+  scale_y_log10()+
+  scale_size_continuous(labels = scales::comma_format(), 
+                        range = c(0.25, 12))+
+  geom_text(aes(
+    label = country
+  ),
+  vjust = 1,
+  check_overlap = TRUE)+
+  facet_wrap(~indicator, ncol = 2)+
+  labs(x = "GDP per Capita",
+       y = "student / teacher ratio", 
+       title = "GDP per capita an student/teacher ratio are negatively correlated",
+       subtitle = "In 2015 for top 100",
+       color = "Region", 
+       size = "Population")
+```
+
+```{r}
+student_ratio %>% 
+  filter(year == 2015, 
+         !is.na(student_ratio), 
+         indicator %in% c("Primary Education", "Secondary Education")) %>% 
+  group_by(country) %>% 
+  filter(n() == 2) %>% 
+  ungroup() %>% 
+   inner_join(indicators, by = "country_code") %>% 
+  arrange(desc(SP.POP.TOTL)) %>% 
+  top_n(100, SP.POP.TOTL) %>% 
+  ggplot(aes(
+    NY.GDP.PCAP.CD,
+    student_ratio,
+    color = region
+  ))+
+  geom_point(aes(
+    size = SP.POP.TOTL
+  ))+
+  scale_x_log10()+
+  scale_y_log10()+
+  scale_size_continuous(labels = scales::comma_format(), 
+                        range = c(0.25, 12))+
+  geom_text(aes(
+    label = country
+  ),
+  vjust = 1,
+  hjust = 1,
+  check_overlap = TRUE)+
+  facet_wrap(~indicator, ncol = 2)+
+  labs(x = "GDP per Capita",
+       y = "student / teacher ratio", 
+       title = "GDP per capita an student/teacher ratio are negatively correlated",
+       subtitle = "In 2015 for top 100",
+       color = "Region", 
+       size = "Population")
+```
+
+```{r}
+secondary_primary_education <-student_ratio %>% 
+  filter(year == 2015, 
+         !is.na(student_ratio), 
+         indicator %in% c("Primary Education", "Secondary Education")) %>% 
+  group_by(country) %>% 
+  filter(n() == 2) %>% 
+  ungroup()
+```
+
+
+```{r}
+secondary_primary_education %>% 
+  filter(country == "Rwanda") %>% 
+   inner_join(indicators, by = "country_code") %>% 
+  arrange(desc(SP.POP.TOTL)) %>% 
+  top_n(100, SP.POP.TOTL) %>% 
+  ggplot(aes(
+    NY.GDP.PCAP.CD,
+    student_ratio,
+    color = region
+  ))+
+  geom_point(aes(
+    size = SP.POP.TOTL
+  ))+
+  scale_x_log10()+
+  scale_y_log10()+
+  scale_size_continuous(labels = scales::comma_format(), 
+                        range = c(0.25, 12))+
+  geom_text(aes(
+    label = country
+  ),
+  vjust = 1,
+  hjust = 1,
+  check_overlap = TRUE)+
+  facet_wrap(~indicator, ncol = 2)+
+  labs(x = "GDP per Capita",
+       y = "student / teacher ratio", 
+       title = "GDP per capita an student/teacher ratio are negatively correlated",
+       subtitle = "In 2015 for top 100",
+       color = "Region", 
+       size = "Population")
+```
+
+```{r}
+secondary_primary_education %>% 
+  select(indicator, country, student_ratio) %>% 
+  mutate(indicator =  snakecase::to_snake_case(indicator)) %>% 
+  spread(indicator, student_ratio) %>% 
+  mutate(ratio = secondary_education/primary_education) %>% 
+  arrange(desc(ratio))
+```
+```{r}
+secondary_primary_education %>% 
+  select(indicator, country, student_ratio) %>% 
+  mutate(indicator =  snakecase::to_snake_case(indicator)) %>% 
+  spread(indicator, student_ratio) %>% 
+  mutate(ratio = secondary_education/primary_education) %>% 
+  arrange(ratio)
+```
+```{r}
+secondary_primary_education %>% 
+  select(indicator, country, student_ratio) %>% 
+  mutate(indicator =  snakecase::to_snake_case(indicator)) %>% 
+  spread(indicator, student_ratio) %>% 
+  mutate(ratio = secondary_education/primary_education) %>% 
+  ggplot(aes(
+    primary_education,
+    secondary_education
+  ))+
+  geom_point()+
+  geom_text(aes(
+    label = country
+  ), 
+  vjust = 1,
+  hjust = 1,
+  check_overlap = TRUE)+
+  scale_x_log10()+
+  scale_y_log10()
+```
+```{r}
+
+student_teacher_ratio_2015 %>% 
+  inner_join(indicators_2, by = "country_code") %>% 
+  filter(!is.na(SP.POP.TOTL.MA.IN)) %>% 
+  mutate(pop_man = SP.POP.TOTL.MA.IN/100) %>% 
+  ggplot(aes(
+    NY.GDP.PCAP.CD,
+    pop_man
+  ))+
+  geom_point()+
+  geom_text(aes(label = country), vjust = 1, hjust = 1, check_overlap = TRUE)+
+  scale_x_log10()+
+  scale_y_log10()
+
+```
+```{r}
+
+student_teacher_ratio_2015 %>% 
+  inner_join(indicators_2, by = "country_code") %>% 
+  filter(!is.na(SP.POP.TOTL.MA.IN)) %>% 
+  mutate(pop_man = SP.POP.TOTL.MA.IN/100) %>% 
+  ggplot(aes(
+    student_ratio,
+    pop_man
+  ))+
+  geom_point()+
+  geom_text(aes(label = country), vjust = 1, hjust = 1, check_overlap = TRUE)+
+  scale_x_log10()+
+  scale_y_log10()
+```
+

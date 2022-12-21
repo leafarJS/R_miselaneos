@@ -86,7 +86,7 @@ bike_traffic %>%
 
 
 
-```{r}
+
 ```{r}
 bike_traffic %>% 
   group_by(hour = hour(date), crossing) %>% 
@@ -137,6 +137,8 @@ bike_traffic %>%
   facet_wrap(~crossing, scale = "free_y")+
   theme(legend.position = "none")
 ```
+
+
 ```{r}
 bike_time_window <- bike_traffic %>% 
   mutate(hour = hour(date)) %>% 
@@ -173,6 +175,9 @@ bike_time_window %>%
   coord_flip()+
   facet_wrap(~crossing)
 ```
+
+
+
 ```{r}
 dispersion_rout <- bike_time_window %>% 
   group_by(crossing) %>% 
@@ -191,6 +196,9 @@ dispersion_rout %>%
   geom_smooth(method = "lm", formula = 'y ~ x')+
   scale_x_log10()
 ```
+
+
+
 ```{r}
 bike_traffic %>% 
   group_by(crossing,
@@ -214,6 +222,10 @@ bike_traffic %>%
        subtitle = "based on crossings from 2014 - february 2019")
 
 ```
+
+
+
+
 ```{r}
 bike_traffic %>% 
   filter(bike_count < 2000) %>% 
@@ -228,6 +240,8 @@ bike_traffic %>%
   ))+
   geom_line()
 ```
+
+
 
 ```{r}
 bike_traffic %>% 
@@ -245,6 +259,9 @@ bike_traffic %>%
   expand_limits(y = 0)+
   facet_wrap(~crossing)
 ```
+
+
+
 ```{r}
 bike_traffic %>% 
   filter(bike_count < 2000) %>% 
@@ -260,6 +277,9 @@ bike_traffic %>%
   geom_line()+
   theme(legend.position = "bottom")
 ```
+
+
+
 ```{r}
 bike_traffic %>% 
   filter(bike_count < 2000) %>% 
@@ -275,6 +295,8 @@ bike_traffic %>%
   geom_line()+
   theme(legend.position = "bottom")
 ```
+
+
 ```{r}
 bike_traffic %>% 
   filter(bike_count < 2000) %>% 
@@ -290,6 +312,8 @@ bike_traffic %>%
   geom_line()+
   theme(legend.position = "bottom")
 ```
+
+
 ```{r}
 bike_traffic %>% 
   filter(bike_count < 2000, date < "2018-01-01") %>% 
@@ -335,6 +359,9 @@ bike_rout_commute <- bike_traffic %>%
            commute) %>% 
   summarise(bike_count = sum(bike_count, na.rm = TRUE))
 ```
+
+
+
 ```{r}
 bike_rout_commute %>% 
   spread(commute, bike_count) %>% 
@@ -363,6 +390,9 @@ bike_direction_hour_crossing <- bike_traffic %>%
   summarise(bike_count = sum(bike_count, na.rm = TRUE)) %>% 
   mutate(percent_bike = bike_count / sum(bike_count))
 ```
+
+
+
 ```{r}
 bike_direction_hour_crossing %>% 
   group_by(crossing) %>% 
