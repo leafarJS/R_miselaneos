@@ -1,0 +1,429 @@
+---
+title: "23_exercice"
+author: "jorge_callejo"
+date: "2022-12-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = TRUE,
+	warning = TRUE
+)
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(countrycode)
+library(ggplot2)
+library(plotly)
+library(WDI)
+theme_set(theme_minimal())
+```
+
+```{r, include=FALSE}
+nobel_winners <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-05-14/nobel_winners.csv") %>%
+  distinct(full_name, prize_year, category, .keep_all = TRUE) %>% 
+  mutate( decade = 10 * (prize_year %/% 10),
+          age = prize_year - year(birth_date))
+
+nobel_winner_all_pubs <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-05-14/nobel_winner_all_pubs.csv") %>% view()
+```
+
+
+```{r}
+nobel_winners %>% 
+  count(category, sort = TRUE)
+```
+```{r}
+nobel_winners %>% 
+  count(laureate_type, sort = TRUE)
+```
+
+```{r}
+nobel_winners %>% 
+  count(category, prize_year, sort = TRUE) %>% 
+  ggplot(aes(
+    prize_year,
+    n, 
+    fill = category
+  ))+
+  geom_col()
+```
+```{r}
+nobel_winners %>% 
+  count(category, 
+        decade) %>% 
+  ggplot(aes(
+    decade,
+    n, 
+    fill = category
+  ))+
+  geom_col()
+```
+
+```{r}
+nobel_winners %>% 
+  group_by(category, 
+           decade) %>% 
+  summarise(
+    winners = n(),
+    winners_per_year = winners / n_distinct(prize_year) #n_distinct: cuente eficientemente el número de valores únicos en un conjunto de vectores
+  ) %>% 
+  ggplot(aes(
+    decade, 
+    winners_per_year,
+    color = category
+  ))+
+  geom_line()+
+  expand_limits(y = 0)
+```
+
+```{r}
+nobel_winners %>% 
+  count(prize_share)
+```
+
+```{r}
+nobel_winners %>% 
+  distinct(full_name, prize_year, category) %>% 
+  group_by(full_name) %>% 
+  mutate(
+    prizes = n(),
+    distinct_prizes = n_distinct(category)
+  ) %>% 
+  arrange(desc(prizes), full_name) 
+```
+
+
+```{r}
+nobel_winners %>% 
+  count(
+    decade,
+    gender = coalesce(gender, laureate_type)
+  ) %>% 
+  ggplot(aes(
+    decade, 
+    n,
+    fill = gender
+  ))+
+  geom_col()
+```
+
+```{r}
+nobel_winners %>% 
+  count(
+    decade,
+    gender = coalesce(gender, laureate_type)
+  ) %>% 
+  group_by(decade) %>% 
+  mutate(percent = n / sum(n)) %>% 
+  ggplot(aes(
+    decade, 
+    percent,
+    fill = gender
+  ))+
+  geom_col()
+```
+
+```{r}
+nobel_winners %>% 
+  count(
+    decade,
+    category,
+    gender = coalesce(gender, laureate_type)
+  ) %>% 
+  group_by(decade, category) %>% 
+  mutate(percent = n / sum(n)) %>% 
+  ggplot(aes(
+    decade, 
+    percent,
+    fill = gender
+  ))+
+  geom_col()+
+  facet_wrap(~category)
+```
+
+```{r}
+nobel_winners %>% 
+  filter(category %in% c("Economics", "Physics", "Chemistry"), gender == "Female")
+```
+```{r}
+nobel_winners %>% 
+  count(
+    decade,
+    category,
+    gender = coalesce(gender, laureate_type)
+  ) %>% 
+  group_by(decade, category) %>% 
+  mutate(percent = n / sum(n)) %>% 
+  ggplot(aes(
+    decade, 
+    n,
+    fill = gender
+  ))+
+  geom_col()+
+  facet_wrap(~category)+
+  labs(x = "Decada",
+       y = " # of Nobel prize winners", 
+       title = "Nobel Prize gender distribution over time")+
+  theme(legend.position = "bottom")
+```
+```{r}
+nobel_winners %>% 
+  mutate(category = fct_reorder(category, age, median, na.rm = TRUE)) %>% 
+  ggplot(aes(
+    category,
+    age
+  ))+
+  geom_boxplot()+
+  coord_flip()
+```
+```{r}
+nobel_winners %>% 
+  filter(!is.na(age)) %>% 
+  group_by(category, decade) %>% 
+  summarise(average_age = mean(age),
+            median_age = median(age)) %>% 
+  ggplot(aes(
+    decade,
+    average_age,
+    color = category
+  ))+
+  geom_line()+
+  expand_limits(y = 0)
+```
+
+```{r}
+nobel_winners %>% 
+  filter(!is.na(age)) %>% 
+  group_by(category, decade) %>% 
+  summarise(average_age = mean(age),
+            median_age = median(age)) %>% 
+  ggplot(aes(
+    decade,
+    average_age,
+    color = category
+  ))+
+  geom_line(show.legend = FALSE)+
+  facet_wrap(~category, scales = "free_y")
+```
+
+```{r}
+nobel_winners %>% 
+  filter(full_name == "Albert Einstein") %>% 
+  pull(motivation)
+```
+```{r}
+nobel_winners %>% 
+  filter(prize_year >= 2010, category == "Peace") %>% 
+  select(full_name, age, prize)
+```
+
+```{r}
+nobel_winners %>% 
+  count(birth_country, sort = TRUE)
+```
+```{r}
+nobel_winners %>% 
+  count(birth_country = fct_lump(birth_country, 15), sort = TRUE)
+```
+```{r}
+nobel_winners %>% 
+  filter(!is.na(birth_country)) %>% 
+  count(birth_country = fct_lump(birth_country, 9), category, sort = TRUE) %>% 
+  mutate(birth_country = fct_reorder(birth_country, n)) %>% 
+  ggplot(aes(
+    birth_country,
+    n,
+    fill = category
+  ))+
+  geom_col()+
+  coord_flip()+
+  theme(legend.position = "bottom")
+```
+
+
+
+```{r}
+nobel_winners %>% 
+  filter(!is.na(birth_country)) %>% 
+  count(birth_country = fct_lump(birth_country, 9), category, sort = TRUE) %>% 
+  mutate(birth_country = fct_reorder(birth_country, n)) %>% 
+  ggplot(aes(
+    birth_country,
+    n,
+    fill = category
+  ))+
+  geom_col(show.legend = FALSE)+
+  facet_wrap(~category)+
+  coord_flip()
+```
+
+```{r}
+WDIsearch("gdp") %>% 
+  view()
+```
+
+```{r}
+indicators_row <- WDI(indicator = "NY.GDP.PCAP.CD", start = 2016, end = 2016, extra = TRUE) %>% 
+  tibble::as_tibble() %>% 
+  select(country,
+         country_code = iso2c,
+         income,
+         gdp_per_capita = NY.GDP.PCAP.CD) 
+
+```
+
+
+
+```{r}
+nobel_winners %>% 
+  inner_join(indicators_row, by = c(birth_country = "country")) %>% 
+  view()
+```
+
+
+```{r}
+nobel_winners_country <- nobel_winners %>%
+  mutate(country_code = countrycode(birth_country, "country.name", "iso2c")) %>% 
+  inner_join(indicators_row, by = "country_code") %>% 
+  mutate(income = fct_relevel(income, c("Low income", "Lower middle income", "Upper middle income", "High income")))
+```
+
+ingresos
+
+
+```{r}
+nobel_winners_country %>% 
+  count(income, sort = TRUE)
+```
+```{r}
+nobel_winners_country %>% 
+  filter(!is.na(income)) %>% 
+  count(category, income) %>% 
+  ggplot(aes(
+    income, 
+    n,
+    fill = category
+  ))+
+  geom_col(show.legend = FALSE)+
+  facet_wrap(~category)+
+  coord_flip()
+```
+```{r}
+nobel_winners_country %>% 
+  filter(!is.na(income)) %>% 
+  count(category, income) %>%
+  group_by(category) %>% 
+  mutate(percent = n / sum(n)) %>% 
+  filter(!income == "Not classified") %>% 
+  ggplot(aes(
+    income, 
+    percent,
+    fill = category
+  ))+
+  geom_col(show.legend = FALSE)+
+  scale_y_continuous(labels = scales::percent_format())+
+  facet_wrap(~category)+
+  coord_flip()+
+  labs(
+    x = "current income level of birth country",
+    y = "% of this category's prizes",
+    title = "Where do Nobel Prize winners come from?"
+  )
+```
+
+```{r}
+nobel_winner_all_pubs %>% 
+  count(category)
+```
+
+```{r}
+nobel_winner_all_pubs %>% 
+  filter(pub_year <= prize_year) %>% 
+  group_by(laureate_id, laureate_name, category, prize_year) %>% 
+  summarise(papers_before_prize = n()) %>% 
+  arrange(laureate_name)
+```
+```{r}
+winner_summarized <- nobel_winner_all_pubs %>% 
+  filter(pub_year <= prize_year) %>% 
+  group_by(laureate_id, laureate_name, category, prize_year) %>% 
+  summarise(papers_before_prize = n(),
+            papers_before_prize_10_years = sum(pub_year >= prize_year - 10),
+            average_paper_age = round(mean(prize_year - pub_year),1),
+            median_paper_age = median(prize_year - pub_year),
+            winning_paper_age = round(mean((prize_year - pub_year)[is_prize_winning_paper == "YES"]),1)) 
+
+```
+
+
+
+```{r}
+nobel_winner_all_pubs %>% 
+  filter(laureate_name == "akasaki, isamu") %>%   count(title, sort = TRUE)
+```
+
+```{r}
+nobel_winner_all_pubs %>% 
+  filter(title == "optical investigations of algan on gan epitaxial films") %>% 
+  view()
+```
+
+
+
+
+```{r}
+winner_summarized %>% 
+  group_by(category,
+           decade = 10 * (prize_year %/% 10)) %>% 
+  summarise(average_papers = mean(papers_before_prize),
+            average_paper_age = mean(average_paper_age),
+            average_winning_paper_age = mean(winning_paper_age)) %>% 
+  ggplot(aes(
+    decade,
+    average_winning_paper_age,
+    color = category
+  ))+
+  geom_line()+
+  theme(legend.position = "bottom")+
+  labs(
+    x = "Prize Year",
+    y = "Time between when paper was published and won prize"
+  )+
+  expand_limits(y = 0)
+```
+
+
+```{r}
+pubs_enriched <- nobel_winner_all_pubs %>% 
+  group_by(laureate_id, category, prize_year) %>% 
+  mutate(papers_before = rank(pub_year, ties.method = "first")-1,
+         total_papers = n(),
+         position_in_career = papers_before / total_papers)
+```
+```{r}
+pubs_enriched %>% 
+  filter(is_prize_winning_paper == "YES") %>% 
+  ggplot(aes(
+    position_in_career
+  ))+
+  geom_histogram(bins = 30)
+```
+
+```{r}
+pubs_enriched %>% 
+  filter(is_prize_winning_paper == "YES") %>% 
+  group_by(prize_decade = 10 * (prize_year %/% 10), category) %>% 
+  summarise(average_position_in_career = mean(position_in_career)) %>% 
+  ggplot(aes(
+    prize_decade,
+    average_position_in_career,
+    color = category
+  ))+
+  geom_line()+
+  theme(legend.position = "bottom")
+```
+
+
