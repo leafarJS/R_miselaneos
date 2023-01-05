@@ -284,6 +284,8 @@ data.today %>%
          ratio = US/IN) %>% 
   arrange(desc(total))
 ```
+
+
 ```{r}
 data.today %>% 
   filter(country %in% c("US", "IN")) %>% 

@@ -1,0 +1,261 @@
+---
+title: "25_exercice"
+author: "jorge_callejo"
+date: "2023-01-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = TRUE,
+	warning = FALSE
+)
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(countrycode)
+library(ggplot2)
+library(plotly)
+library(WDI)
+library(janitor)
+library(mapproj)
+theme_set(theme_minimal())
+```
+
+
+```{r, include=FALSE}
+wine_ratings <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-05-28/winemag-data-130k-v2.csv") %>% 
+  select(-...1) %>% 
+  extract(title, "year", "(20\\d\\d)", convert = TRUE, remove = FALSE)
+```
+
+```{r}
+wine_ratings %>% 
+  count(country, sort = TRUE)
+```
+```{r}
+wine_ratings %>% 
+  count(designation, sort = TRUE)
+```
+```{r}
+wine_ratings %>% 
+  count(country, region_1, sort = TRUE)
+```
+```{r}
+wine_ratings %>% 
+  count(taster_name, sort = TRUE)
+```
+```{r}
+wine_ratings %>% 
+  count(variety, sort = TRUE)
+```
+```{r}
+wine_ratings %>%
+  filter(!is.na(designation)) %>% 
+  count(variety, designation, sort = TRUE)
+```
+```{r}
+wine_ratings %>% 
+  ggplot(aes(
+    year
+  ))+
+  geom_histogram()
+```
+```{r}
+wine_ratings %>% 
+  ggplot(aes(
+    points
+  ))+
+  geom_histogram(binwidth = 1)
+```
+
+```{r}
+wine_ratings %>% 
+  ggplot(aes(
+    price
+  ))+
+  geom_histogram()+
+  scale_x_log10()
+```
+
+```{r}
+wine_ratings %>% 
+  ggplot(aes(
+    price,
+    points
+  ))+
+  geom_point(alpha = 0.1)+
+  geom_smooth(method = "lm")+
+  scale_x_log10()
+```
+
+**cada vez que el precio se duplica, el número esperado de puntos aumenta en 2**
+
+```{r}
+summary(lm(points~log2(price), data = wine_ratings))
+```
+```{r}
+wine_ratings %>% 
+  mutate(country = fct_lump(country, 7)) %>% 
+  lm(points~log2(price) + country, data = .) %>% 
+  summary()
+```
+```{r}
+wine_ratings %>% 
+  mutate(country = fct_relevel(fct_lump(country, 7), "US")) %>% 
+  lm(points~log2(price) + country, data = .) %>% 
+  summary()
+```
+```{r}
+wine_ratings %>% 
+  replace_na(list(taster_name = "Missing")) %>% 
+  mutate(country = fct_relevel(fct_lump(country, 7), "US"),
+         taster_name = fct_relevel(fct_lump(taster_name, 6), "Missing")) %>% 
+  lm(points~log2(price) + country + year + taster_name, data = .) %>% 
+  summary()
+```
+```{r}
+library(broom)
+wine_ratings %>% 
+  replace_na(list(taster_name = "Missing")) %>% 
+  mutate(country = fct_relevel(fct_lump(country, 7), "US"),
+         taster_name = fct_relevel(fct_lump(taster_name, 6), "Missing")) %>% 
+  lm(points~log2(price) + country + year + taster_name, data = .) %>% 
+  tidy()
+```
+```{r}
+wine_ratings %>% 
+  replace_na(list(taster_name = "Missing")) %>% 
+  mutate(country = fct_relevel(fct_lump(country, 7), "US"),
+         taster_name = fct_relevel(fct_lump(taster_name, 6), "Missing")) %>% 
+  lm(points~log2(price) + country + year + taster_name, data = .) %>% 
+  tidy() %>% 
+  filter(term != "(Intercept)") %>% 
+  mutate(term = fct_reorder(term, estimate)) %>% 
+  ggplot(aes(
+    estimate,
+    term
+  ))+
+  geom_point()
+```
+```{r}
+wine_ratings %>% 
+  replace_na(list(taster_name = "Missing")) %>% 
+  mutate(country = fct_relevel(fct_lump(country, 7), "US"),
+         taster_name = fct_relevel(fct_lump(taster_name, 6), "Missing")) %>% 
+  lm(points~log2(price) + country + year + taster_name, data = .) %>% 
+  tidy(conf.int = TRUE) %>% 
+  filter(term != "(Intercept)" ) %>% 
+  mutate(term = fct_reorder(term, estimate)) %>% 
+  ggplot(aes(
+    estimate,
+    term
+  ))+
+  geom_point()+
+  geom_errorbarh(aes(
+    xmin = conf.low,
+    xmax = conf.high
+  ))
+```
+```{r}
+model <- wine_ratings %>% 
+  replace_na(list(taster_name = "Missing", country = "Missing")) %>% 
+  mutate(country = fct_relevel(fct_lump(country, 7), "US"),
+         taster_name = fct_relevel(fct_lump(taster_name, 7), "Missing")) %>% 
+  lm(points~log2(price) + country + year + taster_name, data = .) 
+
+
+
+model %>% 
+  tidy(conf.int = TRUE) %>% 
+  filter(term != "(Intercept)" & term != "year" & term != "log2(price)") %>% 
+  mutate(
+    term = str_replace(term, "country", "Country: "),
+    term = str_replace(term, "taster_name", "Taster: "),
+    term = fct_reorder(term, estimate)) %>% 
+  ggplot(aes(
+    estimate,
+    term
+  ))+
+  geom_point()+
+  geom_errorbarh(aes(
+    xmin = conf.low,
+    xmax = conf.high
+  ))
+
+```
+
+
+```{r}
+wine_ratings %>% 
+  mutate(country = fct_relevel(fct_lump(country, 7), "US")) %>% 
+  mutate(country = fct_reorder(country, points)) %>% 
+  ggplot(aes(
+    country,
+    points
+  ))+
+  geom_boxplot()+
+  coord_flip()
+```
+```{r}
+wine_ratings %>% 
+  ggplot(aes(
+    year, 
+    points,
+    group = year
+  ))+
+  geom_boxplot()
+```
+```{r}
+wine_ratings %>% 
+  group_by(year) %>% 
+  summarise(points = mean(points)) %>% 
+  ggplot(aes(
+    year,
+    points
+  ))+
+  geom_line()
+```
+
+```{r}
+tidy(anova(model))
+```
+```{r}
+library(tidytext)
+wine_rating_words <- wine_ratings %>% 
+  mutate(wine_id = row_number()) %>% 
+  unnest_tokens(word, description) %>% 
+  anti_join(stop_words, by = "word") %>% 
+  filter(!word %in% c("wine", "drink"))
+```
+
+```{r}
+wine_rating_words %>% 
+  count(word, sort = TRUE)
+```
+```{r}
+wine_rating_words %>% 
+  count(word, sort = TRUE) %>% 
+  head(20) %>% 
+  mutate(word = fct_reorder(word, n)) %>% 
+  ggplot(aes(
+    word, 
+    n
+  ))+
+  geom_col()+
+  coord_flip()
+```
+```{r}
+library(widyr)
+
+wine_rating_words_cors <- wine_rating_words %>% 
+  distinct(wine_id, word) %>% 
+  add_count(word) %>% 
+  filter(n >= 10000) %>% 
+  pairwise_cor(word, wine_id, sort = TRUE)
+
+wine_rating_words_cors
+
+```
+
