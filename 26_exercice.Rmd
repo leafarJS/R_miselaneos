@@ -1,0 +1,507 @@
+---
+title: "26_exercices"
+author: "jorge_callejo"
+date: "2023-01-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = TRUE,
+	warning = FALSE
+)
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(countrycode)
+library(ggplot2)
+library(plotly)
+library(WDI)
+library(janitor)
+library(mapproj)
+theme_set(theme_minimal())
+```
+
+```{r, echo=FALSE}
+media_franchises <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-07-02/media_franchises.csv")
+```
+
+
+```{r}
+head(media_franchises,3)
+tail(media_franchises,3)
+sample(media_franchises)
+dim(media_franchises)
+str(media_franchises)
+```
+```{r}
+media_franchises %>% 
+  count(revenue_category, sort = TRUE)
+```
+```{r}
+media_franchises %>% 
+  count(creators, sort = TRUE)
+```
+```{r}
+media_franchises %>% 
+  count(original_media, sort = TRUE)
+```
+```{r}
+media_franchises %>% 
+  count(owners, sort = TRUE) 
+```
+
+```{r}
+media_franchises %>% 
+  count(franchise, sort = TRUE)
+```
+
+```{r}
+media_franchises %>% 
+  distinct(franchise, .keep_all = TRUE) %>% 
+  count(owners, sort = TRUE)
+```
+
+```{r}
+distinct_franchies <- media_franchises %>% 
+  distinct(franchise, .keep_all = TRUE)
+```
+```{r}
+media_franchises %>% 
+  filter(original_media == "Manga") %>% 
+  count(franchise, sort = TRUE)
+```
+```{r}
+franchises <- media_franchises %>% 
+  group_by(franchise, original_media, year_created, creators, owners) %>%
+  summarise(
+    categories = n(),
+    revenue = sum(revenue),
+    mast_profitable = revenue_category[which.max(revenue)]
+  ) %>% 
+  view()
+  
+```
+
+
+
+```{r}
+franchises <- media_franchises %>% 
+  group_by(franchise, original_media, year_created, creators, owners) %>%
+  summarise(
+    categories = n(),
+    total_revenue = sum(revenue),
+    mast_profitable = revenue_category[which.max(revenue)]
+  ) %>% 
+  ungroup() 
+  
+```
+
+### franchise-level
+
+what are the biggest franchies?
+
+
+```{r}
+media_franchises %>% 
+  arrange(desc(revenue))
+```
+
+```{r}
+franchises %>% 
+  arrange(desc(revenue))
+```
+```{r}
+franchises %>% 
+  arrange(desc(revenue)) %>% 
+  head(16) %>% 
+  mutate(franchise = fct_reorder(franchise, revenue)) %>% 
+  ggplot(aes(
+    franchise,
+    revenue, 
+    fill = franchise
+  ))+
+  geom_col(show.legend = FALSE)+
+  coord_flip()+
+  labs(
+    title = "what are the most profitable franchises of all time?"
+  )
+```
+
+```{r}
+media_franchises %>% 
+  semi_join(franchises %>% top_n(16, total_revenue), by = "franchise") %>% 
+  arrange(desc(revenue)) %>% 
+  head(16) %>% 
+  mutate(franchise = fct_reorder(franchise, revenue, sum)) %>% 
+  ggplot(aes(
+    franchise,
+    revenue, 
+    fill = revenue_category
+  ))+
+  geom_col()+
+  coord_flip()+
+  labs(
+    title = "what are the most profitable franchises of all time?"
+  )+
+  theme(legend.position = "bottom")
+```
+
+```{r}
+media_franchises %>% 
+  semi_join(franchises %>% top_n(16, total_revenue), by = "franchise") %>% 
+  arrange(desc(revenue)) %>% 
+  head(16) %>% 
+  mutate(
+    franchise = fct_reorder(franchise, revenue, sum),
+    revenue_category = fct_reorder(revenue_category, revenue, sum)
+    ) %>% 
+  ggplot(aes(
+    franchise,
+    revenue, 
+    fill = revenue_category
+  ))+
+  geom_col()+
+  coord_flip()+
+  labs(
+    title = "what are the most profitable franchises of all time?"
+  )+
+  theme(legend.position = "bottom")
+```
+
+```{r}
+media_franchises %>% 
+  semi_join(franchises %>% top_n(20, total_revenue), by = "franchise") %>% 
+  arrange(desc(revenue)) %>% 
+  head(20) %>% 
+  mutate(
+    franchise = fct_reorder(franchise, revenue, sum),
+    revenue_category = fct_reorder(revenue_category, revenue, sum)
+    ) %>% 
+  ggplot(aes(
+    franchise,
+    revenue, 
+    fill = revenue_category
+  ))+
+  geom_col()+
+  coord_flip()+
+  guides(fill = guide_legend(reverse = TRUE))+
+  labs(
+    title = "what are the most profitable franchises of all time?"
+  )
+```
+
+```{r}
+media_franchises %>% 
+  count(revenue_category, sort = TRUE)
+```
+```{r}
+#install.packages("glue")
+library(glue)
+
+media_franchises %>% 
+  semi_join(franchises %>% top_n(20, total_revenue), by = "franchise") %>% 
+  arrange(desc(revenue)) %>% 
+  head(20) %>% 
+  mutate(franchise = glue("{franchise} ({year_created})")) %>% 
+  mutate(
+    franchise = fct_reorder(franchise, revenue, sum),
+    revenue_category = fct_reorder(revenue_category, revenue, sum)
+    ) %>% 
+  ggplot(aes(
+    franchise,
+    revenue, 
+    fill = revenue_category
+  ))+
+  geom_col()+
+  coord_flip()+
+  guides(fill = guide_legend(reverse = TRUE))+
+  labs(
+    title = "what are the most profitable franchises of all time?"
+  )
+```
+```{r}
+#install.packages("glue")
+library(glue)
+
+media_franchises %>% 
+  semi_join(franchises %>% top_n(20, total_revenue), by = "franchise") %>% 
+  arrange(desc(revenue)) %>% 
+  head(20) %>% 
+  mutate(franchise = glue("{franchise} ({original_media},{year_created})")) %>% 
+  mutate(
+    franchise = fct_reorder(franchise, revenue, sum),
+    revenue_category = fct_reorder(revenue_category, revenue, sum)
+    ) %>% 
+  ggplot(aes(
+    franchise,
+    revenue, 
+    fill = revenue_category
+  ))+
+  geom_col()+
+  coord_flip()+
+  guides(fill = guide_legend(reverse = TRUE))+
+  labs(
+    title = "what are the most profitable franchises of all time?",
+    fill = "Category"
+  )+
+  theme(legend.position = "bottom")
+```
+```{r}
+#install.packages("glue")
+library(glue)
+
+media_franchises %>% 
+  semi_join(franchises %>% top_n(20, total_revenue), by = "franchise") %>% 
+  arrange(desc(revenue)) %>% 
+  head(20) %>% 
+  mutate(franchise = glue("{franchise} ({original_media},{year_created})")) %>% 
+  mutate(
+    franchise = fct_reorder(franchise, revenue, sum),
+    revenue_category = fct_reorder(revenue_category, revenue, sum)
+    ) %>% 
+  ggplot(aes(
+    franchise,
+    revenue, 
+    fill = revenue_category
+  ))+
+  geom_col()+
+  scale_y_continuous(labels = scales::dollar)+
+  coord_flip()+
+  guides(fill = guide_legend(reverse = TRUE))+
+  labs(
+    title = "what are the most profitable franchises of all time?",
+    fill = "Category",
+    y = "Billions",
+    x = ""
+  )+
+  theme(legend.position = "bottom")
+```
+```{r}
+franchises %>% 
+  group_by(owners) %>% 
+  filter(n() > 1) %>% 
+  ungroup() %>% 
+  mutate(
+    franchise = fct_reorder(franchise, total_revenue),
+    owners = fct_reorder(owners, -total_revenue, sum)
+  ) %>% 
+  ggplot(aes(
+    franchise,
+    total_revenue,
+    fill = franchise
+  ))+
+  geom_col(show.legend = FALSE)+
+  coord_flip()+
+  facet_wrap(~owners, scales = "free_y")+
+  theme_classic()
+```
+```{r}
+media_franchises %>% 
+  group_by(owners) %>% 
+  filter(n_distinct(franchise) > 1) %>% 
+  ungroup() %>% 
+  mutate(
+    franchise = fct_reorder(franchise, revenue, sum),
+    owners = fct_reorder(owners, -revenue, sum),
+    revenue_category = fct_reorder(revenue_category, revenue, sum)
+  ) %>% 
+  ggplot(aes(
+    franchise,
+    revenue,
+    fill = revenue_category
+  ))+
+  geom_col()+
+  coord_flip()+
+  facet_wrap(~owners, scales = "free_y")+
+  theme_classic()+
+  theme(legend.position = "bottom")
+```
+
+```{r}
+media_franchises %>% 
+  group_by(owners) %>% 
+  filter(n_distinct(franchise) > 2) %>% 
+  ungroup() %>% 
+  mutate(
+    franchise = fct_reorder(franchise, revenue, sum),
+    owners = fct_reorder(owners, -revenue, sum),
+    revenue_category = fct_reorder(revenue_category, revenue, sum)
+  ) %>% 
+  ggplot(aes(
+    franchise,
+    revenue,
+    fill = revenue_category
+  ))+
+  geom_col()+
+  coord_flip()+
+  scale_y_continuous(labels = scales::dollar)+
+  facet_wrap(~owners, scales = "free_y")+
+  theme_classic()+
+  theme(legend.position = "bottom")+
+  labs(
+    title = "What companies own at least 3 franchises?",
+    y = "Revenue Billions",
+    y = ""
+  )
+```
+
+
+
+```{r}
+franchises %>% 
+  ggplot(aes(
+    year_created,
+    total_revenue
+  ))+
+  geom_point(aes(
+    size = total_revenue
+  ))+
+  scale_y_continuous(labels = scales::dollar)+
+  geom_text(aes(
+    label = franchise
+  ), check_overlap = TRUE, vjust = 1, hjust = -1)+
+  theme(legend.position = "bottom")+
+  labs(
+    title = "When were the 'Great' franchises created?",
+    x = "",
+    y = "Revenue of billions"
+  )
+```
+
+```{r}
+franchises %>% 
+  ggplot(aes(
+    year_created,
+    total_revenue, 
+    color = original_media
+  ))+
+  geom_point(aes(
+    size = total_revenue
+  ), )+
+  scale_y_continuous(labels = scales::dollar)+
+  geom_text(aes(
+    label = franchise
+  ), check_overlap = TRUE, vjust = 1, hjust = -1)+
+  theme(legend.position = "bottom")+
+  labs(
+    title = "When were the 'Great' franchises created?",
+    x = "",
+    y = "Revenue of billions"
+  )
+```
+
+
+```{r}
+media_franchises %>% 
+  group_by(original_media, revenue_category) %>% 
+  summarise(revenue = sum(revenue))
+```
+```{r}
+media_franchises %>% 
+  group_by(original_media) %>% 
+  summarise(revenue = sum(revenue)) %>% 
+  head(10) %>% 
+  arrange(desc(revenue))
+```
+
+```{r}
+media_franchises %>% 
+  group_by(original_media) %>% 
+  filter(sum(revenue) >= 45) %>% 
+  ungroup() %>% 
+  mutate(
+    revenue_category = fct_reorder(revenue_category, revenue, sum),
+    original_media = fct_reorder(original_media, -revenue, sum)) %>% 
+  ggplot(aes(
+    revenue_category,
+    revenue
+  ))+
+  geom_col()+
+  scale_y_continuous(labels = scales::dollar)+
+  coord_flip()+
+  facet_wrap(~original_media)+
+  labs(
+    y = "Revenue category",
+    x = "Revenue of Billions",
+    title = "what kinds of media lead to what types of revenue?"
+  )
+```
+```{r}
+original_media_revenue_category <- media_franchises %>% 
+  group_by(original_media) %>% 
+  filter(sum(revenue) >= 45) %>% 
+  group_by(original_media, revenue_category) %>% 
+  summarise(revenue = sum(revenue)) %>% 
+  ungroup() %>% 
+  mutate(
+    revenue_category = fct_reorder(revenue_category, revenue, sum),
+    original_media = fct_reorder(original_media, -revenue, sum)
+  )
+```
+```{r}
+original_media_revenue_category %>% 
+  ggplot(aes(
+    revenue_category,
+    revenue
+  ))+
+  geom_col()+
+  scale_y_continuous(labels = scales::dollar)+
+  coord_flip()+
+  facet_wrap(~original_media)+
+  labs(
+    y = "Revenue category",
+    x = "Revenue of Billions",
+    title = "what kinds of media lead to what types of revenue?"
+  )
+```
+```{r}
+original_media_revenue_category %>% 
+  mutate(
+    revenue_category = fct_rev(revenue_category),
+    original_media = fct_rev(original_media)
+  ) %>% 
+  ggplot(aes(
+    revenue_category,
+    original_media, 
+    fill = revenue
+  ))+
+  geom_tile()+
+  scale_fill_gradient2(low = "white", high = "red", labels = scales::dollar)+
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_text(angle =90, hjust = 1))+
+  labs(fill = "Billions")
+```
+
+```{r}
+library(glue)
+
+top_franchises <- franchises %>%
+  mutate(franchise = glue("{ franchise } ({ year_created })")) %>%
+  top_n(20, total_revenue)
+
+
+
+media_franchises %>%
+  mutate(franchise = glue("{ franchise } ({ year_created })")) %>%
+  semi_join(top_franchises, by = "franchise") %>%
+  mutate(franchise = fct_reorder(franchise, revenue, sum),
+         revenue_category = fct_reorder(revenue_category, revenue, sum)) %>%
+  ggplot(aes(franchise, revenue)) +
+  geom_col(aes(fill = revenue_category)) +
+  geom_text(aes(y = total_revenue,
+                label = paste0(scales::dollar(total_revenue, accuracy = 1), " B")),
+            data = top_franchises,
+            hjust = 0) +
+  scale_y_continuous(labels = scales::dollar) +
+  expand_limits(y = 100) +
+  coord_flip() +
+  theme(panel.grid.major.y = element_blank()) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  labs(title = "What are the most profitable franchises of all time?",
+       fill = "Category",
+       x = "",
+       y = "Revenue (Billions)")+
+  theme(legend.position = "bottom")
+```
