@@ -1,0 +1,172 @@
+---
+title: "27_exercice"
+author: "jorge_callejo"
+date: "2023-01-29"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = TRUE,
+	warning = FALSE
+)
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(countrycode)
+library(ggplot2)
+library(plotly)
+library(WDI)
+library(janitor)
+library(mapproj)
+library(ggthemes)
+theme_set(theme_light())
+
+```
+
+```{r, echo=FALSE}
+wwc_outcomes <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-07-09/wwc_outcomes.csv")
+squads <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-07-09/squads.csv")
+codes <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-07-09/codes.csv")
+
+outcomes <- wwc_outcomes %>% 
+  left_join(codes, by = "team") %>% 
+  group_by(year, yearly_game_id) %>% 
+  mutate(oposity_score = rev(score)) %>% 
+  ungroup() %>% 
+  mutate(won_by = score - oposity_score)
+```
+
+```{r}
+wwc_outcomes %>% 
+  count(year)
+```
+
+
+```{r}
+#install.packages('rvest')
+
+# scraping in html
+
+
+#library(rvest)
+# fifa_country_codes <- read_html("https://en.wikipedia.org/wiki/List_of_FIFA_country_codes") %>%
+#   html_nodes("table") %>%
+#   map(html_table, fill = TRUE) %>%
+#   .[2:5] %>%
+#   bind_rows() %>%
+#   tbl_df() %>%
+#   select(country = Country, team = Code)
+
+```
+
+
+```{r}
+wwc_outcomes %>% 
+  left_join(codes, by = "team") %>% 
+  filter(year == 2019,
+         team == 'USA') 
+  
+```
+
+```{r}
+wwc_outcomes %>% 
+  left_join(codes, by = "team") %>% 
+ggplot(aes(
+  score
+))+
+  geom_histogram()+
+  facet_wrap(~win_status)
+```
+
+```{r}
+wwc_outcomes %>% 
+  filter(year == 2019) %>% 
+  count(round, sort = TRUE)
+```
+```{r}
+wwc_outcomes %>% 
+  filter(year == 2019, team %in% c('USA', 'NED'))
+```
+```{r}
+avg_group_score <- outcomes %>% 
+  filter(round == "Group") %>% 
+  group_by(year, team) %>% 
+  summarise(avg_group_score = mean(score),
+            avg_group_won_by = mean(won_by),
+            games = n());
+
+
+avg_group_score %>% 
+  count(games, sort = TRUE)
+  
+```
+
+```{r}
+avg_group_score <- outcomes %>% 
+  filter(round == "Group") %>% 
+  group_by(year, team) %>% 
+  summarise(avg_group_score = mean(score),
+            avg_group_won_by = mean(won_by),
+            games = n()) %>% 
+  ungroup()
+
+
+avg_group_score %>% 
+  count(games, sort = TRUE)
+  
+```
+```{r}
+outcomes %>% 
+  inner_join(avg_group_score, by = c('year', 'team')) %>% filter(round == 'Final') %>% 
+  view()
+```
+
+```{r}
+outcomes %>% 
+  inner_join(avg_group_score, by = c('year', 'team')) %>% filter(round == 'Final') %>% 
+  ggplot(aes(
+    country, avg_group_score, fill = win_status
+  ))+
+  geom_col()+
+  facet_wrap(~year, scales = 'free_x')+
+  theme(legend.position = 'bottom')+
+  labs(title = "Does performace in the group roun predict the winner of the finals",
+       subtitle = "yes in all year excetp 2011",
+       x = "country",
+       y = "Averange # of goals the team had won by in the group round", 
+       fill = "Result")
+```
+
+```{r}
+outcomes %>% 
+  inner_join(avg_group_score, by = c('year', 'team')) %>% filter(round != 'Group') %>% 
+group_by(year, yearly_game_id) %>% 
+  mutate(difference = diff(avg_group_won_by)) %>% 
+  ungroup() %>% 
+filter(team_num == 2) %>% 
+  mutate(round = fct_reorder(round, round, length)) %>% 
+  ggplot(aes(
+    difference,
+    won_by
+  ))+
+  geom_point()+
+  geom_smooth(method = 'lm', formula = y ~ x)+
+  geom_abline(color = "red")+
+  facet_wrap(~round)
+
+
+```
+
+```{r, echo=FALSE}
+#EstadísticasBombR
+install.packages("devtools")
+devtools::install_github("statsbomb/SDMTools")
+devtools::install_github("statsbomb/StatsBombR")
+library(StatsBombR)
+```
+```{r}
+ freeCompetitions()
+```
+
